@@ -1,1 +1,1 @@
-# merch-api
+# nexarank-api
