@@ -1,0 +1,7 @@
+com/nexarank/api/NexaRankApplication.class
+com/nexarank/api/service/MerchRuleService.class
+com/nexarank/api/controller/MerchRuleController.class
+com/nexarank/api/config/ElasticsearchConfig.class
+com/nexarank/api/model/MerchRule.class
+com/nexarank/api/repository/MerchRuleRepository.class
+com/nexarank/api/model/MerchRule$RuleType.class

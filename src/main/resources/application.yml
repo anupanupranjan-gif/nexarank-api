@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: nexarank-api
+  elasticsearch:
+    uris: ${ES_URI:https://searchx-es-http.elasticsearch.svc.cluster.local:9200}
+    username: ${ES_USERNAME:elastic}
+    password: ${ES_PASSWORD:changeme}
+    connection-timeout: 5s
+    socket-timeout: 30s
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+logging:
+  level:
+    com.nexarank: DEBUG
