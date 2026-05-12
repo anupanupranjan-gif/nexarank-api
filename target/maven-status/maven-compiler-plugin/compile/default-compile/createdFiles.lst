@@ -11,6 +11,7 @@ com/nexarank/api/model/MerchRule.class
 com/nexarank/api/model/MerchRule$RuleType.class
 com/nexarank/api/controller/AuthController.class
 com/nexarank/api/security/JwtUtil.class
+com/nexarank/api/controller/UserController.class
 com/nexarank/api/model/User$Role.class
 com/nexarank/api/config/ElasticsearchConfig.class
 com/nexarank/api/model/User.class

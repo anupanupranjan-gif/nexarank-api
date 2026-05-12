@@ -3,10 +3,13 @@ package com.nexarank.api.service;
 
 import com.nexarank.api.model.User;
 import com.nexarank.api.repository.UserRepository;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.StreamSupport;
 
 @Service
 public class UserService {
@@ -31,11 +34,21 @@ public class UserService {
         return userRepository.save(user);
     }
 
+    public List<User> getAllUsers() {
+        return StreamSupport
+                .stream(userRepository.findAll(PageRequest.of(0, 100)).spliterator(), false)
+                .toList();
+    }
+
     public Optional<User> findByUsername(String username) {
         return userRepository.findByUsername(username);
     }
 
     public boolean validatePassword(String rawPassword, String encodedPassword) {
         return passwordEncoder.matches(rawPassword, encodedPassword);
+    }
+
+    public void deleteUser(String id) {
+        userRepository.deleteById(id);
     }
 }

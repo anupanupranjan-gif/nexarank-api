@@ -30,7 +30,8 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 // public endpoints
-                .requestMatchers("/api/v1/auth/**").permitAll()
+                .requestMatchers("/api/v1/auth/login").permitAll()
+                .requestMatchers("/api/v1/auth/register").hasRole("ADMIN")
                 .requestMatchers("/actuator/health").permitAll()
                 // read access — all authenticated roles
                 .requestMatchers(HttpMethod.GET, "/api/v1/rules/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")

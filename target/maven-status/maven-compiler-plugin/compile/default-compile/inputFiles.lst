@@ -2,6 +2,7 @@
 /home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/config/ElasticsearchConfig.java
 /home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/controller/AuthController.java
 /home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/controller/MerchRuleController.java
+/home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/controller/UserController.java
 /home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/model/MerchRule.java
 /home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/model/User.java
 /home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/repository/MerchRuleRepository.java
