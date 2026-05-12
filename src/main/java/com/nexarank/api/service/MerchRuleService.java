@@ -1,15 +1,18 @@
+// Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 package com.nexarank.api.service;
 
 import com.nexarank.api.model.MerchRule;
 import com.nexarank.api.repository.MerchRuleRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.StreamSupport;
 
 @Service
 public class MerchRuleService {
@@ -22,7 +25,9 @@ public class MerchRuleService {
     }
 
     public List<MerchRule> getAllRules() {
-        return (List<MerchRule>) repository.findAll();
+        return StreamSupport
+                .stream(repository.findAll(PageRequest.of(0, 100)).spliterator(), false)
+                .toList();
     }
 
     public List<MerchRule> getRulesForQuery(String query) {
