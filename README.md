@@ -47,14 +47,12 @@ java -jar target/nexarank-api-*.jar
 ```
 
 ## API Reference
-
-GET    /api/v1/rules              List all rules
-POST   /api/v1/rules              Create a rule
-GET    /api/v1/rules/{id}         Get a rule
-PUT    /api/v1/rules/{id}         Update a rule
-PATCH  /api/v1/rules/{id}         Partial update (e.g. toggle enabled)
-DELETE /api/v1/rules/{id}         Delete a rule
-
+GET    /api/v1/rules                      List all rules
+POST   /api/v1/rules                      Create a rule
+GET    /api/v1/rules/query/{query}        Get rules matching a specific query keyword
+PUT    /api/v1/rules/{id}                 Update a rule
+DELETE /api/v1/rules/{id}                 Delete a rule
+PATCH  /api/v1/rules/{id}/toggle          Toggle a rule enabled/disabled
 ### Example: Create a BOOST rule
 
 ```bash
@@ -81,6 +79,18 @@ curl -X POST http://localhost:8080/api/v1/rules \
     "pinnedIds": ["SKU-001", "SKU-002"],
     "enabled": true
   }'
+```
+
+### Example: Toggle a rule
+
+```bash
+curl -X PATCH http://localhost:8080/api/v1/rules/{id}/toggle
+```
+
+### Example: Get rules for a query
+
+```bash
+curl http://localhost:8080/api/v1/rules/query/battery
 ```
 
 ## Roadmap
