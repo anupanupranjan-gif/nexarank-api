@@ -41,6 +41,18 @@ public class MerchRule {
     @Field(type = FieldType.Boolean)
     private boolean enabled;
 
+    @Field(type = FieldType.Keyword)
+    private RuleStatus status;
+
+    @Field(type = FieldType.Keyword)
+    private String submittedBy;
+
+    @Field(type = FieldType.Keyword)
+    private String approvedBy;
+
+    @Field(type = FieldType.Text)
+    private String reviewComment;
+
     @Field(type = FieldType.Date)
     private Instant createdAt;
 
@@ -49,6 +61,10 @@ public class MerchRule {
 
     public enum RuleType {
         PIN, BOOST, BURY, SYNONYM
+    }
+
+    public enum RuleStatus {
+        DRAFT, PENDING_REVIEW, APPROVED, REJECTED, DISABLED
     }
 
     public String getId() { return id; }
@@ -69,6 +85,14 @@ public class MerchRule {
     public void setSynonyms(List<String> synonyms) { this.synonyms = synonyms; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
+    public RuleStatus getStatus() { return status; }
+    public void setStatus(RuleStatus status) { this.status = status; }
+    public String getSubmittedBy() { return submittedBy; }
+    public void setSubmittedBy(String submittedBy) { this.submittedBy = submittedBy; }
+    public String getApprovedBy() { return approvedBy; }
+    public void setApprovedBy(String approvedBy) { this.approvedBy = approvedBy; }
+    public String getReviewComment() { return reviewComment; }
+    public void setReviewComment(String reviewComment) { this.reviewComment = reviewComment; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

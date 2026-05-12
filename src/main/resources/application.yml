@@ -20,3 +20,8 @@ management:
 logging:
   level:
     com.nexarank: DEBUG
+
+nexarank:
+  jwt:
+    secret: ${JWT_SECRET:nexarank-dev-secret-key-2026-minimum-32-chars}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}

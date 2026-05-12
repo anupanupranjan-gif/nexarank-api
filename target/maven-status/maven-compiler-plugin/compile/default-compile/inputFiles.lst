@@ -1,6 +1,13 @@
 /home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/NexaRankApplication.java
 /home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/config/ElasticsearchConfig.java
+/home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/controller/AuthController.java
 /home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/controller/MerchRuleController.java
 /home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/model/MerchRule.java
+/home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/model/User.java
 /home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/repository/MerchRuleRepository.java
+/home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/repository/UserRepository.java
+/home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/security/JwtAuthFilter.java
+/home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/security/JwtUtil.java
+/home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/security/SecurityConfig.java
 /home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/service/MerchRuleService.java
+/home/oracle/codebase/nexarank-api/src/main/java/com/nexarank/api/service/UserService.java
