@@ -43,6 +43,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/rules/**").hasAnyRole("APPROVER", "ADMIN")
                 // user management — admin only
                 .requestMatchers("/api/v1/users/**").hasRole("ADMIN")
+                // facet config — read for all, write for admin
+                .requestMatchers(HttpMethod.GET, "/api/v1/facets/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
+                .requestMatchers("/api/v1/facets/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
