@@ -34,8 +34,11 @@ public class MerchRuleService {
     }
 
     public List<MerchRule> getApprovedRules() {
+        Instant now = Instant.now();
         return getAllRules().stream()
                 .filter(r -> r.getStatus() == MerchRule.RuleStatus.APPROVED && r.isEnabled())
+                .filter(r -> r.getActivateAt() == null || r.getActivateAt().isBefore(now))
+                .filter(r -> r.getExpireAt() == null || r.getExpireAt().isAfter(now))
                 .toList();
     }
 

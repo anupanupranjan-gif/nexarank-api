@@ -9,6 +9,7 @@ import org.springframework.data.elasticsearch.annotations.Setting;
 
 import java.time.Instant;
 import java.util.List;
+import java.time.ZonedDateTime;
 
 @Document(indexName = "merch_rules")
 @Setting(replicas = 0)
@@ -54,6 +55,12 @@ public class MerchRule {
     private String reviewComment;
 
     @Field(type = FieldType.Date)
+    private Instant activateAt;
+
+    @Field(type = FieldType.Date)
+    private Instant expireAt;
+
+    @Field(type = FieldType.Date)
     private Instant createdAt;
 
     @Field(type = FieldType.Date)
@@ -93,6 +100,11 @@ public class MerchRule {
     public void setApprovedBy(String approvedBy) { this.approvedBy = approvedBy; }
     public String getReviewComment() { return reviewComment; }
     public void setReviewComment(String reviewComment) { this.reviewComment = reviewComment; }
+    public Instant getActivateAt() { return activateAt; }
+    public void setActivateAt(Instant activateAt) { this.activateAt = activateAt; }
+    public Instant getExpireAt() { return expireAt; }
+    public void setExpireAt(Instant expireAt) { this.expireAt = expireAt; }
+
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
