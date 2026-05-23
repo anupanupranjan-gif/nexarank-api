@@ -3,6 +3,8 @@ package com.nexarank.api.service;
 
 import com.nexarank.api.model.MerchRule;
 import com.nexarank.api.repository.MerchRuleRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -14,6 +16,8 @@ import java.util.stream.StreamSupport;
 
 @Service
 public class MerchRuleService {
+
+    private static final Logger log = LoggerFactory.getLogger(MerchRuleService.class);
 
     private final MerchRuleRepository repository;
 
@@ -55,7 +59,9 @@ public class MerchRuleService {
         rule.setEnabled(false);
         rule.setCreatedAt(Instant.now());
         rule.setUpdatedAt(Instant.now());
-        return repository.save(rule);
+        MerchRule saved = repository.save(rule);
+        log.info("RULE_CREATED type={} query={} by={}", rule.getType(), rule.getQuery(), rule.getSubmittedBy());
+        return saved;
     }
 
     public Optional<MerchRule> getById(String id) {
@@ -82,7 +88,9 @@ public class MerchRuleService {
             rule.setApprovedBy(currentUser);
             rule.setReviewComment(comment);
             rule.setUpdatedAt(Instant.now());
-            return repository.save(rule);
+            MerchRule saved = repository.save(rule);
+            log.info("RULE_APPROVED id={} query={} by={} comment={}", rule.getId(), rule.getQuery(), rule.getApprovedBy(), comment);
+            return saved;
         });
     }
 
@@ -94,7 +102,9 @@ public class MerchRuleService {
             rule.setApprovedBy(currentUser);
             rule.setReviewComment(comment);
             rule.setUpdatedAt(Instant.now());
-            return repository.save(rule);
+            MerchRule saved = repository.save(rule);
+            log.info("RULE_REJECTED id={} query={} by={} comment={}", rule.getId(), rule.getQuery(), rule.getApprovedBy(), comment);
+            return saved;
         });
     }
 
