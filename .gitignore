@@ -7,3 +7,6 @@ target/
 .settings/
 .classpath
 .project
+hs_err_pid*.log
+replay_pid*.log
+core.*
