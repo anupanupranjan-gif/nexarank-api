@@ -33,6 +33,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/auth/login").permitAll()
                 .requestMatchers("/api/v1/auth/register").hasRole("ADMIN")
                 .requestMatchers("/actuator/health").permitAll()
+                // rule enrichment — public, called by customer search services
+                .requestMatchers("/api/v1/rules/enrich").permitAll()
                 // read access — all authenticated roles
                 .requestMatchers(HttpMethod.GET, "/api/v1/rules/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
                 // create and edit — merchandiser and above
@@ -46,9 +48,10 @@ public class SecurityConfig {
                 // facet config — read for all, write for admin
                 .requestMatchers(HttpMethod.GET, "/api/v1/facets/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
                 .requestMatchers("/api/v1/facets/**").hasRole("ADMIN")
-                    .requestMatchers(HttpMethod.GET, "/api/v1/click-intelligence/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
-                    .requestMatchers(HttpMethod.GET, "/api/v1/search-quality/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
-                    .requestMatchers(HttpMethod.POST, "/api/v1/search-quality/run").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/click-intelligence/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/search-quality/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/search-quality/run").hasRole("ADMIN")
+                .requestMatchers("/api/v1/engine-config/**").hasRole("ADMIN")
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
