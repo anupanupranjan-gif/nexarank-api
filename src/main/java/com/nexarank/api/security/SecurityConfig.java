@@ -46,7 +46,9 @@ public class SecurityConfig {
                 // facet config — read for all, write for admin
                 .requestMatchers(HttpMethod.GET, "/api/v1/facets/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
                 .requestMatchers("/api/v1/facets/**").hasRole("ADMIN")
-                .anyRequest().authenticated()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/click-intelligence/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
+                    .requestMatchers(HttpMethod.GET, "/api/v1/search-quality/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
+                    .requestMatchers(HttpMethod.POST, "/api/v1/search-quality/run").hasRole("ADMIN")
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 

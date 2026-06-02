@@ -28,4 +28,7 @@ nexarank:
   level:
     com.nexarank: DEBUG
     org.springframework.web: INFO
+  search-api:
+    base-url: http://search-api.default.svc.cluster.local/api/v1
+    api-key: searchx-dev-key-2026
 
