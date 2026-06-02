@@ -10,12 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import javax.net.ssl.*;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.security.cert.X509Certificate;
-import java.time.Duration;
 import java.util.*;
 
 @Component
@@ -33,8 +28,8 @@ public class ElasticsearchAdapter implements SearchEnginePort {
     public boolean testConnection(SearchEngineConfig config) {
         try {
             String url = config.getConnectionUrl() + "/_cluster/health";
-            HttpResponse<String> res = get(url, config);
-            boolean ok = res.statusCode() == 200;
+            String res = get(url, config);
+            boolean ok = res != null && res.contains("status");
             log.info("ES connection test to {}: {}", config.getConnectionUrl(), ok ? "OK" : "FAILED");
             return ok;
         } catch (Exception e) {
@@ -47,10 +42,10 @@ public class ElasticsearchAdapter implements SearchEnginePort {
     public List<SearchField> getFields(SearchEngineConfig config) {
         try {
             String url = config.getConnectionUrl() + "/" + config.getIndexName() + "/_mapping";
-            HttpResponse<String> res = get(url, config);
-            if (res.statusCode() != 200) return List.of();
+            String resBody = get(url, config);
+            if (resBody == null || resBody.isBlank()) return List.of();
 
-            JsonNode root = mapper.readTree(res.body());
+            JsonNode root = mapper.readTree(resBody);
             List<SearchField> fields = new ArrayList<>();
 
             // Navigate: indexName -> mappings -> properties
@@ -112,10 +107,10 @@ public class ElasticsearchAdapter implements SearchEnginePort {
                 }
                 """.formatted(fieldName);
 
-            HttpResponse<String> res = post(url, body, config);
-            if (res.statusCode() != 200) return List.of();
+            String resBody = post(url, body, config);
+            if (resBody == null || resBody.isBlank()) return List.of();
 
-            JsonNode root = mapper.readTree(res.body());
+            JsonNode root = mapper.readTree(resBody);
             List<String> values = new ArrayList<>();
             root.path("aggregations").path("values").path("buckets")
                 .forEach(b -> values.add(b.path("key").asText()));
@@ -231,28 +226,60 @@ public class ElasticsearchAdapter implements SearchEnginePort {
     }
 
     // ── HTTP helpers ──────────────────────────────────────────────────────────
+    // Uses HttpURLConnection instead of java.net.http.HttpClient
+    // because HttpClient ignores SSLParameters hostname verification in Java 25
 
-    private HttpResponse<String> get(String url, SearchEngineConfig config) throws Exception {
-        HttpRequest req = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Authorization", basicAuth(config))
-            .header("Content-Type", "application/json")
-            .timeout(Duration.ofSeconds(5))
-            .GET()
-            .build();
-        return buildHttpClient(config).send(req, HttpResponse.BodyHandlers.ofString());
+    private String get(String url, SearchEngineConfig config) throws Exception {
+        return execute("GET", url, null, config);
     }
 
-    private HttpResponse<String> post(String url, String body,
-                                       SearchEngineConfig config) throws Exception {
-        HttpRequest req = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Authorization", basicAuth(config))
-            .header("Content-Type", "application/json")
-            .timeout(Duration.ofSeconds(5))
-            .POST(HttpRequest.BodyPublishers.ofString(body))
-            .build();
-        return buildHttpClient(config).send(req, HttpResponse.BodyHandlers.ofString());
+    private String post(String url, String body, SearchEngineConfig config) throws Exception {
+        return execute("POST", url, body, config);
+    }
+
+    private String execute(String method, String url, String body,
+                            SearchEngineConfig config) throws Exception {
+        if (config.isSslEnabled() && !config.isSslVerify()) {
+            disableHostnameVerification();
+        }
+        java.net.URL u = new java.net.URL(url);
+        javax.net.ssl.HttpsURLConnection conn = config.isSslEnabled()
+            ? (javax.net.ssl.HttpsURLConnection) u.openConnection()
+            : null;
+        java.net.HttpURLConnection http = conn != null ? conn
+            : (java.net.HttpURLConnection) u.openConnection();
+
+        if (conn != null && !config.isSslVerify()) {
+            SSLContext ctx = SSLContext.getInstance("TLS");
+            ctx.init(null, new TrustManager[]{new X509TrustManager() {
+                public void checkClientTrusted(X509Certificate[] c, String a) {}
+                public void checkServerTrusted(X509Certificate[] c, String a) {}
+                public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+            }}, null);
+            conn.setSSLSocketFactory(ctx.getSocketFactory());
+            conn.setHostnameVerifier((h, s) -> true);
+        }
+
+        http.setRequestMethod(method);
+        http.setRequestProperty("Authorization", basicAuth(config));
+        http.setRequestProperty("Content-Type", "application/json");
+        http.setConnectTimeout(5000);
+        http.setReadTimeout(5000);
+
+        if (body != null) {
+            http.setDoOutput(true);
+            try (java.io.OutputStream os = http.getOutputStream()) {
+                os.write(body.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+        }
+
+        int status = http.getResponseCode();
+        java.io.InputStream is = status < 400 ? http.getInputStream() : http.getErrorStream();
+        if (is == null) return "";
+        try (java.util.Scanner scanner = new java.util.Scanner(is,
+                java.nio.charset.StandardCharsets.UTF_8)) {
+            return scanner.useDelimiter("\\A").hasNext() ? scanner.next() : "";
+        }
     }
 
     private String basicAuth(SearchEngineConfig config) {
@@ -260,31 +287,7 @@ public class ElasticsearchAdapter implements SearchEnginePort {
         return "Basic " + Base64.getEncoder().encodeToString(creds.getBytes());
     }
 
-    private HttpClient buildHttpClient(SearchEngineConfig config) {
-        if (config.isSslEnabled() && !config.isSslVerify()) {
-            try {
-                SSLContext ctx = SSLContext.getInstance("TLS");
-                ctx.init(null, new TrustManager[]{new X509TrustManager() {
-                    public void checkClientTrusted(X509Certificate[] c, String a) {}
-                    public void checkServerTrusted(X509Certificate[] c, String a) {}
-                    public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
-                }}, null);
-                HttpClient.Builder builder = HttpClient.newBuilder()
-                    .sslContext(ctx)
-                    .connectTimeout(Duration.ofSeconds(5));
-                // Disable hostname verification for self-signed certs
-                try {
-                    javax.net.ssl.SSLParameters params = new javax.net.ssl.SSLParameters();
-                    params.setEndpointIdentificationAlgorithm("");
-                    builder.sslParameters(params);
-                } catch (Exception ignored) {}
-                return builder.build();
-            } catch (Exception e) {
-                log.warn("Failed to create trust-all SSL context, using default");
-            }
-        }
-        return HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5))
-            .build();
+    private void disableHostnameVerification() {
+        javax.net.ssl.HttpsURLConnection.setDefaultHostnameVerifier((h, s) -> true);
     }
 }
