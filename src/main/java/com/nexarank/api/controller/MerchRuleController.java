@@ -1,19 +1,12 @@
 // Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 package com.nexarank.api.controller;
 
+import com.nexarank.api.model.ErrorResponse;
 import com.nexarank.api.model.MerchRule;
 import com.nexarank.api.service.MerchRuleService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
@@ -44,10 +37,11 @@ public class MerchRuleController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<MerchRule> getById(@PathVariable String id) {
+    public ResponseEntity<?> getById(@PathVariable String id) {
         return service.getById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ErrorResponse.of("RULE_NOT_FOUND", "Rule not found: " + id)));
     }
 
     @PostMapping
@@ -56,35 +50,39 @@ public class MerchRuleController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<MerchRule> updateRule(@PathVariable String id, @RequestBody MerchRule rule) {
+    public ResponseEntity<?> updateRule(@PathVariable String id, @RequestBody MerchRule rule) {
         return service.updateRule(id, rule)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ErrorResponse.of("RULE_NOT_FOUND", "Rule not found: " + id)));
     }
 
     @PatchMapping("/{id}/toggle")
-    public ResponseEntity<MerchRule> toggleRule(@PathVariable String id) {
+    public ResponseEntity<?> toggleRule(@PathVariable String id) {
         return service.toggleRule(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ErrorResponse.of("RULE_NOT_FOUND", "Rule not found: " + id)));
     }
 
     @PatchMapping("/{id}/approve")
-    public ResponseEntity<MerchRule> approveRule(@PathVariable String id,
-                                                  @RequestBody(required = false) Map<String, String> body) {
+    public ResponseEntity<?> approveRule(@PathVariable String id,
+                                          @RequestBody(required = false) Map<String, String> body) {
         String comment = body != null ? body.getOrDefault("comment", "") : "";
         return service.approveRule(id, comment)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ErrorResponse.of("RULE_NOT_FOUND", "Rule not found: " + id)));
     }
 
     @PatchMapping("/{id}/reject")
-    public ResponseEntity<MerchRule> rejectRule(@PathVariable String id,
-                                                 @RequestBody(required = false) Map<String, String> body) {
+    public ResponseEntity<?> rejectRule(@PathVariable String id,
+                                         @RequestBody(required = false) Map<String, String> body) {
         String comment = body != null ? body.getOrDefault("comment", "") : "";
         return service.rejectRule(id, comment)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ErrorResponse.of("RULE_NOT_FOUND", "Rule not found: " + id)));
     }
 
     @DeleteMapping("/{id}")
