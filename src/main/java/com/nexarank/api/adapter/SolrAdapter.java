@@ -47,9 +47,9 @@ public class SolrAdapter implements SearchEnginePort {
     @Override
     public List<SearchField> getFields(SearchEngineConfig config) {
         try {
-            // Solr Luke request — returns field info
+            // Solr schema fields endpoint — more reliable than Luke for dynamic fields
             String url = config.getConnectionUrl() + "/solr/" +
-                         config.getIndexName() + "/admin/luke?wt=json&numTerms=0";
+                         config.getIndexName() + "/schema/fields?wt=json";
             HttpResponse<String> res = get(url, config);
             if (res.statusCode() != 200) return List.of();
 
@@ -57,29 +57,30 @@ public class SolrAdapter implements SearchEnginePort {
             JsonNode fields = root.path("fields");
             List<SearchField> result = new ArrayList<>();
 
-            fields.fields().forEachRemaining(entry -> {
-                String name = entry.getKey();
-                JsonNode fieldDef = entry.getValue();
+            for (JsonNode fieldDef : fields) {
+                String name = fieldDef.path("name").asText();
 
                 // Skip internal Solr fields
-                if (name.startsWith("_") || name.equals("id")) return;
+                if (name.startsWith("_") || name.equals("id")) continue;
 
                 String type = fieldDef.path("type").asText("string");
-                String schema = fieldDef.path("schema").asText("");
+                boolean indexed = fieldDef.path("indexed").asBoolean(true);
+                boolean stored = fieldDef.path("stored").asBoolean(true);
+                boolean multiValued = fieldDef.path("multiValued").asBoolean(false);
 
                 SearchField field = new SearchField();
                 field.setName(name);
                 field.setType(mapSolrType(type));
-                field.setIndexed(schema.contains("I"));
-                field.setStored(schema.contains("S"));
-                field.setFacetable(!schema.contains("M") &&
+                field.setIndexed(indexed);
+                field.setStored(stored);
+                field.setFacetable(!multiValued &&
                                    (type.contains("string") || type.contains("int") ||
-                                    type.contains("bool")));
-                field.setSortable(schema.contains("S") &&
+                                    type.contains("bool") || type.contains("plong")));
+                field.setSortable(stored &&
                                   (type.contains("string") || type.contains("int") ||
-                                   type.contains("date")));
+                                   type.contains("date") || type.contains("plong")));
                 result.add(field);
-            });
+            }
 
             log.info("Fetched {} fields from Solr collection {}",
                 result.size(), config.getIndexName());
