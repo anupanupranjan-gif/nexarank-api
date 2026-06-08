@@ -2,6 +2,7 @@
 package com.nexarank.api.service;
 
 import com.nexarank.api.model.FacetConfig;
+import java.util.UUID;
 import com.nexarank.api.repository.FacetConfigRepository;
 import org.springframework.stereotype.Service;
 
@@ -31,6 +32,7 @@ public class FacetConfigService {
     }
 
     public FacetConfig createFacet(FacetConfig facet) {
+        if (facet.getId() == null) facet.setId(UUID.randomUUID().toString());
         if (repository.existsByFieldName(facet.getFieldName())) {
             throw new IllegalArgumentException("Facet already exists for field: " + facet.getFieldName());
         }
@@ -72,6 +74,9 @@ public class FacetConfigService {
 
         for (String[] d : defaults) {
             FacetConfig f = new FacetConfig();
+            f.setId(UUID.randomUUID().toString());
+            f.setTenantId("default");
+            f.setProjectId("main");
             f.setFieldName(d[0]);
             f.setDisplayLabel(d[1]);
             f.setFacetType(FacetConfig.FacetType.valueOf(d[2]));

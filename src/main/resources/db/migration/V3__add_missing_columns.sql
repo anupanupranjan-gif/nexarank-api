@@ -1,0 +1,3 @@
+-- Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'VIEWER';
+ALTER TABLE facet_config ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT NOW();

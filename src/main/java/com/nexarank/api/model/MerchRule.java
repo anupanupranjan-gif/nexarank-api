@@ -1,112 +1,125 @@
 // Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 package com.nexarank.api.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.elasticsearch.annotations.Document;
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
-import org.springframework.data.elasticsearch.annotations.Setting;
-
+import jakarta.persistence.*;
 import java.time.Instant;
 import java.util.List;
-import java.time.ZonedDateTime;
 
-@Document(indexName = "merch_rules")
-@Setting(replicas = 0)
+@Entity
+@Table(name = "merch_rules")
 public class MerchRule {
 
     @Id
     private String id;
 
-    @Field(type = FieldType.Keyword)
+    @Column(name = "tenant_id", nullable = false)
+    private String tenantId;
+
+    @Column(name = "project_id", nullable = false)
+    private String projectId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private RuleType type;
 
-    @Field(type = FieldType.Keyword)
+    @Column(nullable = false)
     private String query;
 
-    @Field(type = FieldType.Keyword)
-    private List<String> pinnedIds;
-
-    @Field(type = FieldType.Keyword)
+    @Column(name = "boost_field")
     private String boostField;
 
-    @Field(type = FieldType.Keyword)
+    @Column(name = "boost_value")
     private String boostValue;
 
-    @Field(type = FieldType.Float)
+    @Column(name = "boost_factor")
     private Float boostFactor;
 
-    @Field(type = FieldType.Keyword)
-    private List<String> synonyms;
+    @Column(name = "pinned_ids", columnDefinition = "TEXT")
+    private String pinnedIdsJson;
 
-    @Field(type = FieldType.Boolean)
-    private boolean enabled;
+    @Column(name = "synonyms", columnDefinition = "TEXT")
+    private String synonymsJson;
 
-    @Field(type = FieldType.Keyword)
-    private RuleStatus status;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private RuleStatus status = RuleStatus.DRAFT;
 
-    @Field(type = FieldType.Keyword)
+    @Column(nullable = false)
+    private boolean enabled = true;
+
+    @Column(name = "submitted_by")
     private String submittedBy;
 
-    @Field(type = FieldType.Keyword)
+    @Column(name = "approved_by")
     private String approvedBy;
 
-    @Field(type = FieldType.Text)
-    private String reviewComment;
+    @Column(name = "rejection_comment")
+    private String rejectionComment;
 
-    @Field(type = FieldType.Date)
+    @Column(name = "activate_at")
     private Instant activateAt;
 
-    @Field(type = FieldType.Date)
+    @Column(name = "expire_at")
     private Instant expireAt;
 
-    @Field(type = FieldType.Date)
-    private Instant createdAt;
+    @Column(name = "created_at")
+    private Instant createdAt = Instant.now();
 
-    @Field(type = FieldType.Date)
-    private Instant updatedAt;
+    @Column(name = "updated_at")
+    private Instant updatedAt = Instant.now();
 
-    public enum RuleType {
-        PIN, BOOST, BURY, SYNONYM
-    }
+    @Transient
+    private List<String> pinnedIds;
 
-    public enum RuleStatus {
-        DRAFT, PENDING_REVIEW, APPROVED, REJECTED, DISABLED
-    }
+    @Transient
+    private List<String> synonyms;
+
+    public enum RuleType { BOOST, PIN, BURY, SYNONYM }
+
+    public enum RuleStatus { DRAFT, PENDING_REVIEW, APPROVED, REJECTED, DISABLED }
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
+    public String getTenantId() { return tenantId; }
+    public void setTenantId(String tenantId) { this.tenantId = tenantId; }
+    public String getProjectId() { return projectId; }
+    public void setProjectId(String projectId) { this.projectId = projectId; }
     public RuleType getType() { return type; }
     public void setType(RuleType type) { this.type = type; }
     public String getQuery() { return query; }
     public void setQuery(String query) { this.query = query; }
-    public List<String> getPinnedIds() { return pinnedIds; }
-    public void setPinnedIds(List<String> pinnedIds) { this.pinnedIds = pinnedIds; }
     public String getBoostField() { return boostField; }
     public void setBoostField(String boostField) { this.boostField = boostField; }
     public String getBoostValue() { return boostValue; }
     public void setBoostValue(String boostValue) { this.boostValue = boostValue; }
     public Float getBoostFactor() { return boostFactor; }
     public void setBoostFactor(Float boostFactor) { this.boostFactor = boostFactor; }
-    public List<String> getSynonyms() { return synonyms; }
-    public void setSynonyms(List<String> synonyms) { this.synonyms = synonyms; }
-    public boolean isEnabled() { return enabled; }
-    public void setEnabled(boolean enabled) { this.enabled = enabled; }
+    public String getPinnedIdsJson() { return pinnedIdsJson; }
+    public void setPinnedIdsJson(String pinnedIdsJson) { this.pinnedIdsJson = pinnedIdsJson; }
+    public String getSynonymsJson() { return synonymsJson; }
+    public void setSynonymsJson(String synonymsJson) { this.synonymsJson = synonymsJson; }
     public RuleStatus getStatus() { return status; }
     public void setStatus(RuleStatus status) { this.status = status; }
+    public boolean isEnabled() { return enabled; }
+    public void setEnabled(boolean enabled) { this.enabled = enabled; }
     public String getSubmittedBy() { return submittedBy; }
     public void setSubmittedBy(String submittedBy) { this.submittedBy = submittedBy; }
     public String getApprovedBy() { return approvedBy; }
     public void setApprovedBy(String approvedBy) { this.approvedBy = approvedBy; }
-    public String getReviewComment() { return reviewComment; }
-    public void setReviewComment(String reviewComment) { this.reviewComment = reviewComment; }
+    public String getRejectionComment() { return rejectionComment; }
+    public void setRejectionComment(String rejectionComment) { this.rejectionComment = rejectionComment; }
+    public void setReviewComment(String comment) { this.rejectionComment = comment; }
+    public String getReviewComment() { return rejectionComment; }
     public Instant getActivateAt() { return activateAt; }
     public void setActivateAt(Instant activateAt) { this.activateAt = activateAt; }
     public Instant getExpireAt() { return expireAt; }
     public void setExpireAt(Instant expireAt) { this.expireAt = expireAt; }
-
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+    public List<String> getPinnedIds() { return pinnedIds; }
+    public void setPinnedIds(List<String> pinnedIds) { this.pinnedIds = pinnedIds; }
+    public List<String> getSynonyms() { return synonyms; }
+    public void setSynonyms(List<String> synonyms) { this.synonyms = synonyms; }
 }

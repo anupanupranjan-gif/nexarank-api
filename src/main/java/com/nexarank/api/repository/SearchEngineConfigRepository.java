@@ -2,10 +2,10 @@
 package com.nexarank.api.repository;
 
 import com.nexarank.api.model.SearchEngineConfig;
-import org.springframework.data.elasticsearch.repository.ElasticsearchRepository;
-import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.Optional;
 
-@Repository
-public interface SearchEngineConfigRepository
-    extends ElasticsearchRepository<SearchEngineConfig, String> {
+public interface SearchEngineConfigRepository extends JpaRepository<SearchEngineConfig, String> {
+    Optional<SearchEngineConfig> findFirstByTenantIdAndProjectId(String tenantId, String projectId);
+    Optional<SearchEngineConfig> findTopByOrderByCreatedAtDesc();
 }
