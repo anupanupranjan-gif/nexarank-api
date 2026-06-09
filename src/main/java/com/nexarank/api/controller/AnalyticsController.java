@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.time.temporal.ChronoUnit;
 import java.util.stream.Collectors;
 
 @RestController
@@ -116,6 +117,43 @@ public class AnalyticsController {
         overview.put("periodDays", days);
 
         return ResponseEntity.ok(overview);
+    }
+
+
+    @GetMapping("/trends")
+    public ResponseEntity<?> getTrends(@RequestParam(defaultValue = "30") int days) {
+        String tenantId = TenantContext.getTenantId();
+        String projectId = TenantContext.getProjectId();
+        Instant since = Instant.now().minus(days, ChronoUnit.DAYS);
+
+        // Get daily search stats from search_events
+        List<Map<String, Object>> trends = new ArrayList<>();
+        for (int i = days - 1; i >= 0; i--) {
+            Instant dayStart = Instant.now().minus(i, ChronoUnit.DAYS)
+                    .truncatedTo(ChronoUnit.DAYS);
+            Instant dayEnd = dayStart.plus(1, ChronoUnit.DAYS);
+            String dateStr = dayStart.toString().substring(0, 10);
+
+            long searches = searchEventRepository
+                    .countByTenantIdAndProjectIdAndSearchedAtBetween(tenantId, projectId, dayStart, dayEnd);
+            long zeroResults = zeroResultRepository
+                    .countByTenantIdAndProjectIdAndOccurredAtBetween(tenantId, projectId, dayStart, dayEnd);
+            Double avgLatency = searchEventRepository
+                    .findAvgLatencyBetween(tenantId, projectId, dayStart, dayEnd);
+
+            if (searches > 0 || zeroResults > 0) {
+                Map<String, Object> day = new LinkedHashMap<>();
+                day.put("date", dateStr);
+                day.put("searches", searches);
+                day.put("zeroResults", zeroResults);
+                day.put("zeroResultRate", searches > 0
+                        ? Math.round((double) zeroResults / searches * 1000.0) / 1000.0 : 0.0);
+                day.put("avgLatencyMs", avgLatency != null ? Math.round(avgLatency) : null);
+                trends.add(day);
+            }
+        }
+
+        return ResponseEntity.ok(trends);
     }
 
     @GetMapping("/rules-performance")

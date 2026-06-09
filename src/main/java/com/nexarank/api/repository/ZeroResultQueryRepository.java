@@ -20,4 +20,7 @@ public interface ZeroResultQueryRepository extends JpaRepository<ZeroResultQuery
 
     long countByTenantIdAndProjectIdAndOccurredAtAfter(
             String tenantId, String projectId, Instant since);
+
+    long countByTenantIdAndProjectIdAndOccurredAtBetween(
+            String tenantId, String projectId, Instant start, Instant end);
 }

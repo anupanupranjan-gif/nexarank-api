@@ -20,4 +20,15 @@ public interface SearchEventRepository extends JpaRepository<SearchEvent, String
     Double findAvgLatency(@Param("tenantId") String tenantId,
                            @Param("projectId") String projectId,
                            @Param("since") Instant since);
+
+    long countByTenantIdAndProjectIdAndSearchedAtBetween(
+            String tenantId, String projectId, Instant start, Instant end);
+
+    @Query("SELECT AVG(s.tookMs) FROM SearchEvent s WHERE s.tenantId = :tenantId " +
+           "AND s.projectId = :projectId AND s.searchedAt >= :start AND s.searchedAt < :end " +
+           "AND s.tookMs IS NOT NULL")
+    Double findAvgLatencyBetween(@Param("tenantId") String tenantId,
+                                  @Param("projectId") String projectId,
+                                  @Param("start") Instant start,
+                                  @Param("end") Instant end);
 }
