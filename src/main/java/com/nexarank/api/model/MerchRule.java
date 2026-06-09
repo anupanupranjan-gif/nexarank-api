@@ -45,6 +45,9 @@ public class MerchRule {
     private RuleStatus status = RuleStatus.DRAFT;
 
     @Column(nullable = false)
+    private int priority = 50;
+
+    @Column(nullable = false)
     private boolean enabled = true;
 
     @Column(name = "submitted_by")
@@ -100,6 +103,8 @@ public class MerchRule {
     public void setSynonymsJson(String synonymsJson) { this.synonymsJson = synonymsJson; }
     public RuleStatus getStatus() { return status; }
     public void setStatus(RuleStatus status) { this.status = status; }
+    public int getPriority() { return priority; }
+    public void setPriority(int priority) { this.priority = priority; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
     public String getSubmittedBy() { return submittedBy; }

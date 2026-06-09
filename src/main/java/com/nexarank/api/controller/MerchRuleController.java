@@ -90,4 +90,21 @@ public class MerchRuleController {
         service.deleteRule(id);
         return ResponseEntity.noContent().build();
     }
+
+    @GetMapping("/conflicts")
+    public ResponseEntity<?> detectConflicts(@RequestParam String query) {
+        return ResponseEntity.ok(service.detectConflicts(query));
+    }
+
+    @PostMapping("/preview")
+    public ResponseEntity<?> previewRule(@RequestBody MerchRule rule) {
+        return ResponseEntity.ok(service.previewRule(rule));
+    }
+
+    @GetMapping("/{id}/conflicts")
+    public ResponseEntity<?> getConflictsForRule(@PathVariable String id) {
+        return service.getById(id)
+                .map(rule -> ResponseEntity.ok(service.detectConflicts(rule.getQuery())))
+                .orElse(ResponseEntity.notFound().build());
+    }
 }

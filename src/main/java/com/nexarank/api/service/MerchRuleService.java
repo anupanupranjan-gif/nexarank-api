@@ -1,6 +1,10 @@
 // Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 package com.nexarank.api.service;
 import com.nexarank.api.security.TenantContext;
+import java.util.ArrayList;
+import java.util.Map;
+import java.util.LinkedHashMap;
+import java.util.stream.Collectors;
 import java.util.UUID;
 
 import com.nexarank.api.model.MerchRule;
@@ -120,6 +124,97 @@ public class MerchRuleService {
 
     public void deleteRule(String id) {
         repository.deleteById(id);
+    }
+
+    public List<Map<String, Object>> detectConflicts(String query) {
+        String tenantId = TenantContext.getTenantId();
+        String projectId = TenantContext.getProjectId();
+        List<MerchRule> rules = repository.findByTenantIdAndProjectIdAndQueryAndEnabled(
+                tenantId, projectId, query, true);
+
+        List<Map<String, Object>> conflicts = new ArrayList<>();
+
+        // Check conflicts between rule types
+        boolean hasPin = rules.stream().anyMatch(r -> r.getType() == MerchRule.RuleType.PIN &&
+                r.getStatus() == MerchRule.RuleStatus.APPROVED);
+        boolean hasBoost = rules.stream().anyMatch(r -> r.getType() == MerchRule.RuleType.BOOST &&
+                r.getStatus() == MerchRule.RuleStatus.APPROVED);
+        boolean hasBury = rules.stream().anyMatch(r -> r.getType() == MerchRule.RuleType.BURY &&
+                r.getStatus() == MerchRule.RuleStatus.APPROVED);
+
+        if (hasPin && hasBoost) {
+            Map<String, Object> conflict = new java.util.LinkedHashMap<>();
+            conflict.put("type", "PIN_BOOST_CONFLICT");
+            conflict.put("query", query);
+            conflict.put("message", "Both PIN and BOOST rules active for query '" + query + "'. PIN takes precedence.");
+            conflict.put("severity", "WARNING");
+            conflicts.add(conflict);
+        }
+        if (hasBoost && hasBury) {
+            Map<String, Object> conflict = new java.util.LinkedHashMap<>();
+            conflict.put("type", "BOOST_BURY_CONFLICT");
+            conflict.put("query", query);
+            conflict.put("message", "Both BOOST and BURY rules active for query '" + query + "'. Check that different products are targeted.");
+            conflict.put("severity", "WARNING");
+            conflicts.add(conflict);
+        }
+        if (hasPin && hasBury) {
+            Map<String, Object> conflict = new java.util.LinkedHashMap<>();
+            conflict.put("type", "PIN_BURY_CONFLICT");
+            conflict.put("query", query);
+            conflict.put("message", "Both PIN and BURY rules active for query '" + query + "'.");
+            conflict.put("severity", "INFO");
+            conflicts.add(conflict);
+        }
+
+        // Check duplicate rule types
+        rules.stream()
+            .filter(r -> r.getStatus() == MerchRule.RuleStatus.APPROVED)
+            .collect(java.util.stream.Collectors.groupingBy(MerchRule::getType))
+            .forEach((type, typeRules) -> {
+                if (typeRules.size() > 1) {
+                    Map<String, Object> conflict = new java.util.LinkedHashMap<>();
+                    conflict.put("type", "DUPLICATE_RULE_TYPE");
+                    conflict.put("query", query);
+                    conflict.put("message", typeRules.size() + " " + type + " rules for query '" + query + "'. Highest priority wins.");
+                    conflict.put("severity", "INFO");
+                    conflicts.add(conflict);
+                }
+            });
+
+        return conflicts;
+    }
+
+    public Map<String, Object> previewRule(MerchRule rule) {
+        String tenantId = TenantContext.getTenantId();
+        String projectId = TenantContext.getProjectId();
+
+        // Get existing active rules for this query
+        List<MerchRule> existing = repository.findByTenantIdAndProjectIdAndQueryAndEnabled(
+                tenantId, projectId, rule.getQuery(), true)
+                .stream()
+                .filter(r -> r.getStatus() == MerchRule.RuleStatus.APPROVED)
+                .sorted(java.util.Comparator.comparingInt(MerchRule::getPriority))
+                .collect(java.util.stream.Collectors.toList());
+
+        List<Map<String, Object>> conflicts = detectConflicts(rule.getQuery());
+
+        Map<String, Object> preview = new java.util.LinkedHashMap<>();
+        preview.put("query", rule.getQuery());
+        preview.put("newRule", Map.of(
+            "type", rule.getType(),
+            "priority", rule.getPriority()
+        ));
+        preview.put("existingActiveRules", existing.stream().map(r -> Map.of(
+            "id", r.getId(),
+            "type", r.getType(),
+            "priority", r.getPriority(),
+            "status", r.getStatus()
+        )).collect(java.util.stream.Collectors.toList()));
+        preview.put("conflicts", conflicts);
+        preview.put("willApply", rule.getStatus() == null || rule.getStatus() != MerchRule.RuleStatus.REJECTED);
+
+        return preview;
     }
 
     private String getCurrentUsername() {
