@@ -3,6 +3,8 @@ package com.nexarank.api.controller;
 
 import com.nexarank.api.repository.ClickEventRepository;
 import com.nexarank.api.repository.MerchRuleRepository;
+import com.nexarank.api.repository.ZeroResultQueryRepository;
+import com.nexarank.api.repository.QualityEvalResultRepository;
 import com.nexarank.api.security.TenantContext;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -18,11 +20,17 @@ public class AnalyticsController {
 
     private final ClickEventRepository clickEventRepository;
     private final MerchRuleRepository merchRuleRepository;
+    private final ZeroResultQueryRepository zeroResultRepository;
+    private final QualityEvalResultRepository qualityResultRepository;
 
     public AnalyticsController(ClickEventRepository clickEventRepository,
-                                MerchRuleRepository merchRuleRepository) {
+                                MerchRuleRepository merchRuleRepository,
+                                ZeroResultQueryRepository zeroResultRepository,
+                                QualityEvalResultRepository qualityResultRepository) {
         this.clickEventRepository = clickEventRepository;
         this.merchRuleRepository = merchRuleRepository;
+        this.zeroResultRepository = zeroResultRepository;
+        this.qualityResultRepository = qualityResultRepository;
     }
 
     @GetMapping("/overview")
@@ -65,13 +73,31 @@ public class AnalyticsController {
                 })
                 .average().orElse(0.0);
 
+        // Zero result queries
+        long zeroResultCount = zeroResultRepository.countByTenantIdAndProjectIdAndOccurredAtAfter(
+                tenantId, projectId, since);
+        List<Map<String, Object>> topZeroResults = zeroResultRepository
+                .findTopZeroResultQueries(tenantId, projectId, since)
+                .stream().limit(10)
+                .map(row -> Map.of("query", row[0], "occurrences", ((Number) row[1]).longValue()))
+                .collect(Collectors.toList());
+
+        // Latest quality score
+        var latestQuality = qualityResultRepository
+                .findFirstByTenantIdAndProjectIdOrderByRunAtDesc(tenantId, projectId);
+
         Map<String, Object> overview = new LinkedHashMap<>();
         overview.put("totalClicks", totalClicks);
         overview.put("totalQueries", queryStats.size());
         overview.put("avgCtr", Math.round(avgCtr * 1000.0) / 1000.0);
         overview.put("activeRules", activeRules);
         overview.put("pendingRules", pendingRules);
+        overview.put("zeroResultCount", zeroResultCount);
+        overview.put("topZeroResultQueries", topZeroResults);
         overview.put("topQueries", topQueries);
+        overview.put("latestNdcg10", latestQuality.map(q -> q.getNdcgAt10()).orElse(null));
+        overview.put("latestMrr10", latestQuality.map(q -> q.getMrrAt10()).orElse(null));
+        overview.put("latestQualityRunAt", latestQuality.map(q -> q.getRunAt()).orElse(null));
         overview.put("periodDays", days);
 
         return ResponseEntity.ok(overview);

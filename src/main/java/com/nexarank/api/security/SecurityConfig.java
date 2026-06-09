@@ -37,6 +37,7 @@ public class SecurityConfig {
                 // rule enrichment — public, called by customer search services
                 .requestMatchers("/api/v1/rules/enrich").permitAll()
                 .requestMatchers("/api/v1/clicks").hasAnyRole("INTERNAL", "ADMIN", "MERCHANDISER", "APPROVER", "VIEWER")
+                .requestMatchers("/api/v1/zero-results").hasAnyRole("INTERNAL", "ADMIN")
                 // read access — all authenticated roles
                 .requestMatchers(HttpMethod.GET, "/api/v1/rules/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
                 // create and edit — merchandiser and above
