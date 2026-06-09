@@ -43,6 +43,8 @@ public class SecurityConfig {
                 // toggle and delete — approver and above
                 .requestMatchers(HttpMethod.PATCH, "/api/v1/rules/**").hasAnyRole("APPROVER", "ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/rules/**").hasAnyRole("APPROVER", "ADMIN")
+                // tenant and project management — admin only
+                .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 // user management — admin only
                 .requestMatchers("/api/v1/users/**").hasRole("ADMIN")
                 // facet config — read for all, write for admin

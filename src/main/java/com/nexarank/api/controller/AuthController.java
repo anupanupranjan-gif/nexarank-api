@@ -34,11 +34,15 @@ public class AuthController {
                 .filter(user -> userService.validatePassword(password, user.getPassword()))
                 .filter(User::isEnabled)
                 .map(user -> {
-                    String token = jwtUtil.generateToken(user.getUsername(), user.getRole().name());
+                    String tenantId = user.getTenantId() != null ? user.getTenantId() : "default";
+                    String projectId = "main";
+                    String token = jwtUtil.generateToken(user.getUsername(), user.getRole().name(), tenantId, projectId);
                     return ResponseEntity.ok(Map.of(
                             "token", token,
                             "username", user.getUsername(),
-                            "role", user.getRole().name()
+                            "role", user.getRole().name(),
+                            "tenantId", tenantId,
+                            "projectId", projectId
                     ));
                 })
                 .orElse(ResponseEntity.status(HttpStatus.UNAUTHORIZED)

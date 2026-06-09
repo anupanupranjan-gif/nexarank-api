@@ -1,5 +1,6 @@
 // Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 package com.nexarank.api.service;
+import com.nexarank.api.security.TenantContext;
 import java.util.UUID;
 
 import com.nexarank.api.model.MerchRule;
@@ -55,8 +56,8 @@ public class MerchRuleService {
 
     public MerchRule createRule(MerchRule rule) {
         if (rule.getId() == null) rule.setId(UUID.randomUUID().toString());
-        if (rule.getTenantId() == null) rule.setTenantId("default");
-        if (rule.getProjectId() == null) rule.setProjectId("main");
+        if (rule.getTenantId() == null) rule.setTenantId(TenantContext.getTenantId());
+        if (rule.getProjectId() == null) rule.setProjectId(TenantContext.getProjectId());
         String currentUser = getCurrentUsername();
         rule.setSubmittedBy(currentUser);
         rule.setStatus(MerchRule.RuleStatus.PENDING_REVIEW);

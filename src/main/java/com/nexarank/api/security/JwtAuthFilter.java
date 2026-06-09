@@ -28,24 +28,33 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain)
             throws ServletException, IOException {
+        try {
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                String token = authHeader.substring(7);
+                if (jwtUtil.isTokenValid(token)) {
+                    String username = jwtUtil.extractUsername(token);
+                    String role = jwtUtil.extractRole(token);
+                    String tenantId = jwtUtil.extractTenantId(token);
+                    String projectId = jwtUtil.extractProjectId(token);
 
-        String authHeader = request.getHeader("Authorization");
+                    // Set tenant context for this request
+                    TenantContext.setTenantId(tenantId);
+                    TenantContext.setProjectId(projectId);
 
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7);
-            if (jwtUtil.isTokenValid(token)) {
-                String username = jwtUtil.extractUsername(token);
-                String role = jwtUtil.extractRole(token);
-                UsernamePasswordAuthenticationToken auth =
-                        new UsernamePasswordAuthenticationToken(
-                                username,
-                                null,
-                                List.of(new SimpleGrantedAuthority("ROLE_" + role))
-                        );
-                SecurityContextHolder.getContext().setAuthentication(auth);
+                    UsernamePasswordAuthenticationToken auth =
+                            new UsernamePasswordAuthenticationToken(
+                                    username,
+                                    null,
+                                    List.of(new SimpleGrantedAuthority("ROLE_" + role))
+                            );
+                    SecurityContextHolder.getContext().setAuthentication(auth);
+                }
             }
+            filterChain.doFilter(request, response);
+        } finally {
+            // Always clear tenant context after request completes
+            TenantContext.clear();
         }
-
-        filterChain.doFilter(request, response);
     }
 }

@@ -1,5 +1,6 @@
 // Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 package com.nexarank.api.service;
+import com.nexarank.api.security.TenantContext;
 
 import com.nexarank.api.model.FacetConfig;
 import java.util.UUID;
@@ -75,8 +76,8 @@ public class FacetConfigService {
         for (String[] d : defaults) {
             FacetConfig f = new FacetConfig();
             f.setId(UUID.randomUUID().toString());
-            f.setTenantId("default");
-            f.setProjectId("main");
+            f.setTenantId(TenantContext.getTenantId());
+            f.setProjectId(TenantContext.getProjectId());
             f.setFieldName(d[0]);
             f.setDisplayLabel(d[1]);
             f.setFacetType(FacetConfig.FacetType.valueOf(d[2]));

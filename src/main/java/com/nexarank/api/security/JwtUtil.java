@@ -24,14 +24,21 @@ public class JwtUtil {
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    public String generateToken(String username, String role) {
+    public String generateToken(String username, String role, String tenantId, String projectId) {
         return Jwts.builder()
                 .subject(username)
                 .claim("role", role)
+                .claim("tenantId", tenantId)
+                .claim("projectId", projectId)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expirationMs))
                 .signWith(getSigningKey())
                 .compact();
+    }
+
+    // Keep backward compatible overload
+    public String generateToken(String username, String role) {
+        return generateToken(username, role, "default", "main");
     }
 
     public String extractUsername(String token) {
@@ -40,6 +47,16 @@ public class JwtUtil {
 
     public String extractRole(String token) {
         return parseClaims(token).get("role", String.class);
+    }
+
+    public String extractTenantId(String token) {
+        String tenantId = parseClaims(token).get("tenantId", String.class);
+        return tenantId != null ? tenantId : "default";
+    }
+
+    public String extractProjectId(String token) {
+        String projectId = parseClaims(token).get("projectId", String.class);
+        return projectId != null ? projectId : "main";
     }
 
     public boolean isTokenValid(String token) {
