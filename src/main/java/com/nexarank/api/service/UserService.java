@@ -5,13 +5,11 @@ import java.util.UUID;
 
 import com.nexarank.api.model.User;
 import com.nexarank.api.repository.UserRepository;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.StreamSupport;
 
 @Service
 public class UserService {
@@ -39,9 +37,7 @@ public class UserService {
     }
 
     public List<User> getAllUsers() {
-        return StreamSupport
-                .stream(userRepository.findAll(PageRequest.of(0, 100)).spliterator(), false)
-                .toList();
+        return userRepository.findByTenantId(TenantContext.getTenantId());
     }
 
     public Optional<User> findByUsername(String username) {

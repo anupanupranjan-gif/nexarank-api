@@ -21,11 +21,11 @@ public class FacetConfigService {
     }
 
     public List<FacetConfig> getAllFacets() {
-        return repository.findAllByOrderBySortOrderAsc();
+        return repository.findByTenantIdAndProjectIdOrderBySortOrderAsc(TenantContext.getTenantId(), TenantContext.getProjectId());
     }
 
     public List<FacetConfig> getEnabledFacets() {
-        return repository.findByEnabledTrueOrderBySortOrderAsc();
+        return repository.findByTenantIdAndProjectIdAndEnabledOrderBySortOrderAsc(TenantContext.getTenantId(), TenantContext.getProjectId(), true);
     }
 
     public Optional<FacetConfig> getById(String id) {

@@ -10,13 +10,11 @@ import com.nexarank.api.port.SearchEnginePort;
 import com.nexarank.api.repository.SearchEngineConfigRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.StreamSupport;
 
 @Service
 public class SearchEngineConfigService {
@@ -33,9 +31,8 @@ public class SearchEngineConfigService {
     }
 
     public Optional<SearchEngineConfig> getConfig() {
-        return StreamSupport
-            .stream(repository.findAll(PageRequest.of(0, 1)).spliterator(), false)
-            .findFirst();
+        return repository.findFirstByTenantIdAndProjectId(
+                TenantContext.getTenantId(), TenantContext.getProjectId());
     }
 
     public SearchEngineConfig saveConfig(SearchEngineConfig config) {

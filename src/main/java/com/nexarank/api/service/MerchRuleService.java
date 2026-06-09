@@ -7,14 +7,12 @@ import com.nexarank.api.model.MerchRule;
 import com.nexarank.api.repository.MerchRuleRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.StreamSupport;
 
 @Service
 public class MerchRuleService {
@@ -28,9 +26,8 @@ public class MerchRuleService {
     }
 
     public List<MerchRule> getAllRules() {
-        return StreamSupport
-                .stream(repository.findAll(PageRequest.of(0, 100)).spliterator(), false)
-                .toList();
+        return repository.findByTenantIdAndProjectId(
+                TenantContext.getTenantId(), TenantContext.getProjectId());
     }
 
     public List<MerchRule> getPendingRules() {
