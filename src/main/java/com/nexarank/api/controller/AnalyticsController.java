@@ -4,6 +4,7 @@ package com.nexarank.api.controller;
 import com.nexarank.api.repository.ClickEventRepository;
 import com.nexarank.api.repository.MerchRuleRepository;
 import com.nexarank.api.repository.ZeroResultQueryRepository;
+import com.nexarank.api.repository.SearchEventRepository;
 import com.nexarank.api.repository.QualityEvalResultRepository;
 import com.nexarank.api.security.TenantContext;
 import org.springframework.http.ResponseEntity;
@@ -22,15 +23,18 @@ public class AnalyticsController {
     private final MerchRuleRepository merchRuleRepository;
     private final ZeroResultQueryRepository zeroResultRepository;
     private final QualityEvalResultRepository qualityResultRepository;
+    private final SearchEventRepository searchEventRepository;
 
     public AnalyticsController(ClickEventRepository clickEventRepository,
                                 MerchRuleRepository merchRuleRepository,
                                 ZeroResultQueryRepository zeroResultRepository,
-                                QualityEvalResultRepository qualityResultRepository) {
+                                QualityEvalResultRepository qualityResultRepository,
+                                SearchEventRepository searchEventRepository) {
         this.clickEventRepository = clickEventRepository;
         this.merchRuleRepository = merchRuleRepository;
         this.zeroResultRepository = zeroResultRepository;
         this.qualityResultRepository = qualityResultRepository;
+        this.searchEventRepository = searchEventRepository;
     }
 
     @GetMapping("/overview")
@@ -73,6 +77,14 @@ public class AnalyticsController {
                 })
                 .average().orElse(0.0);
 
+        // Search volume stats
+        long totalSearches = searchEventRepository.countByTenantIdAndProjectIdAndSearchedAtAfter(tenantId, projectId, since);
+        Double avgLatencyMs = searchEventRepository.findAvgLatency(tenantId, projectId, since);
+        long zeroResultsInPeriod = zeroResultRepository.countByTenantIdAndProjectIdAndOccurredAtAfter(tenantId, projectId, since);
+        double zeroResultRate = totalSearches > 0
+                ? Math.min(1.0, (double) zeroResultsInPeriod / totalSearches)
+                : 0.0;
+
         // Zero result queries
         long zeroResultCount = zeroResultRepository.countByTenantIdAndProjectIdAndOccurredAtAfter(
                 tenantId, projectId, since);
@@ -92,6 +104,9 @@ public class AnalyticsController {
         overview.put("avgCtr", Math.round(avgCtr * 1000.0) / 1000.0);
         overview.put("activeRules", activeRules);
         overview.put("pendingRules", pendingRules);
+        overview.put("totalSearches", totalSearches);
+        overview.put("zeroResultRate", Math.round(zeroResultRate * 1000.0) / 1000.0);
+        overview.put("avgLatencyMs", avgLatencyMs != null ? Math.round(avgLatencyMs) : null);
         overview.put("zeroResultCount", zeroResultCount);
         overview.put("topZeroResultQueries", topZeroResults);
         overview.put("topQueries", topQueries);
