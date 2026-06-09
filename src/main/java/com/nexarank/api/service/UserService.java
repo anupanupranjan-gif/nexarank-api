@@ -5,6 +5,9 @@ import java.util.UUID;
 
 import com.nexarank.api.model.User;
 import com.nexarank.api.repository.UserRepository;
+import com.nexarank.api.repository.UserGroupMembershipRepository;
+import com.nexarank.api.model.UserGroupMembership;
+import java.util.List;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -16,10 +19,32 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final UserGroupMembershipRepository membershipRepository;
 
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder,
+                       UserGroupMembershipRepository membershipRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.membershipRepository = membershipRepository;
+    }
+
+    public List<UserGroupMembership> getUserGroups(String userId) {
+        return membershipRepository.findByUserId(userId);
+    }
+
+    public UserGroupMembership addUserToGroup(String userId, String groupId) {
+        if (membershipRepository.findByUserIdAndGroupId(userId, groupId).isPresent()) {
+            return membershipRepository.findByUserIdAndGroupId(userId, groupId).get();
+        }
+        UserGroupMembership m = new UserGroupMembership();
+        m.setId(UUID.randomUUID().toString());
+        m.setUserId(userId);
+        m.setGroupId(groupId);
+        return membershipRepository.save(m);
+    }
+
+    public void removeUserFromGroup(String userId, String groupId) {
+        membershipRepository.deleteByUserIdAndGroupId(userId, groupId);
     }
 
     public User createUser(String username, String rawPassword, User.Role role) {

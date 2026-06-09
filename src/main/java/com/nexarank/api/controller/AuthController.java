@@ -4,6 +4,7 @@ package com.nexarank.api.controller;
 import com.nexarank.api.model.User;
 import com.nexarank.api.repository.UserGroupRepository;
 import com.nexarank.api.repository.GroupPermissionRepository;
+import com.nexarank.api.repository.UserGroupMembershipRepository;
 import java.util.List;
 import java.util.stream.Collectors;
 import com.nexarank.api.security.JwtUtil;
@@ -25,14 +26,17 @@ public class AuthController {
     private final JwtUtil jwtUtil;
     private final UserGroupRepository userGroupRepository;
     private final GroupPermissionRepository groupPermissionRepository;
+    private final UserGroupMembershipRepository membershipRepository;
 
     public AuthController(UserService userService, JwtUtil jwtUtil,
                           UserGroupRepository userGroupRepository,
-                          GroupPermissionRepository groupPermissionRepository) {
+                          GroupPermissionRepository groupPermissionRepository,
+                          UserGroupMembershipRepository membershipRepository) {
         this.userService = userService;
         this.jwtUtil = jwtUtil;
         this.userGroupRepository = userGroupRepository;
         this.groupPermissionRepository = groupPermissionRepository;
+        this.membershipRepository = membershipRepository;
     }
 
     @PostMapping("/login")
@@ -46,9 +50,15 @@ public class AuthController {
                 .map(user -> {
                     String tenantId = user.getTenantId() != null ? user.getTenantId() : "default";
                     String projectId = "main";
-                    // Load group permissions
-                    List<String> permissions = List.of();
-                    if (user.getGroupId() != null) {
+                    // Load permissions from ALL user groups (union)
+                    List<String> permissions = membershipRepository.findByUserId(user.getId())
+                            .stream()
+                            .flatMap(m -> groupPermissionRepository.findByGroupId(m.getGroupId()).stream())
+                            .map(gp -> gp.getPermission().name())
+                            .distinct()
+                            .collect(Collectors.toList());
+                    // Fallback to single group_id if no memberships
+                    if (permissions.isEmpty() && user.getGroupId() != null) {
                         permissions = groupPermissionRepository.findByGroupId(user.getGroupId())
                                 .stream().map(gp -> gp.getPermission().name()).collect(Collectors.toList());
                     }

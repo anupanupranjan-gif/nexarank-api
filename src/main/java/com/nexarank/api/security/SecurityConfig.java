@@ -36,6 +36,7 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/health").permitAll()
                 // rule enrichment — public, called by customer search services
                 .requestMatchers("/api/v1/rules/enrich").permitAll()
+                .requestMatchers("/api/v1/clicks").hasAnyRole("INTERNAL", "ADMIN", "MERCHANDISER", "APPROVER", "VIEWER")
                 // read access — all authenticated roles
                 .requestMatchers(HttpMethod.GET, "/api/v1/rules/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
                 // create and edit — merchandiser and above

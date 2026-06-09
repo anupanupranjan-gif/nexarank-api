@@ -29,6 +29,20 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                     FilterChain filterChain)
             throws ServletException, IOException {
         try {
+            // Internal service calls (from nexarank-click-consumer)
+            String tenantIdHeader = request.getHeader("X-Tenant-Id");
+            String projectIdHeader = request.getHeader("X-Project-Id");
+            if (tenantIdHeader != null) {
+                TenantContext.setTenantId(tenantIdHeader);
+                TenantContext.setProjectId(projectIdHeader != null ? projectIdHeader : "main");
+                TenantContext.setPermissions(java.util.List.of());
+                org.springframework.security.authentication.UsernamePasswordAuthenticationToken internalAuth =
+                    new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        "internal-service", null,
+                        java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_INTERNAL")));
+                SecurityContextHolder.getContext().setAuthentication(internalAuth);
+            }
+
             String authHeader = request.getHeader("Authorization");
             if (authHeader != null && authHeader.startsWith("Bearer ")) {
                 String token = authHeader.substring(7);

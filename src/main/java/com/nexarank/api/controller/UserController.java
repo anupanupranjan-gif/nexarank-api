@@ -2,6 +2,8 @@
 package com.nexarank.api.controller;
 
 import com.nexarank.api.model.User;
+import com.nexarank.api.model.UserGroupMembership;
+import com.nexarank.api.repository.UserGroupMembershipRepository;
 import com.nexarank.api.service.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +26,22 @@ public class UserController {
 
     public UserController(UserService userService) {
         this.userService = userService;
+    }
+
+    @GetMapping("/{id}/groups")
+    public ResponseEntity<?> getUserGroups(@PathVariable String id) {
+        return ResponseEntity.ok(userService.getUserGroups(id));
+    }
+
+    @PostMapping("/{id}/groups/{groupId}")
+    public ResponseEntity<?> addUserToGroup(@PathVariable String id, @PathVariable String groupId) {
+        return ResponseEntity.ok(userService.addUserToGroup(id, groupId));
+    }
+
+    @DeleteMapping("/{id}/groups/{groupId}")
+    public ResponseEntity<?> removeUserFromGroup(@PathVariable String id, @PathVariable String groupId) {
+        userService.removeUserFromGroup(id, groupId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping
