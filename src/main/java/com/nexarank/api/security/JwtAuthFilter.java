@@ -41,6 +41,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     // Set tenant context for this request
                     TenantContext.setTenantId(tenantId);
                     TenantContext.setProjectId(projectId);
+                    TenantContext.setPermissions(jwtUtil.extractPermissions(token));
 
                     UsernamePasswordAuthenticationToken auth =
                             new UsernamePasswordAuthenticationToken(

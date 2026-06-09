@@ -29,6 +29,9 @@ public class User {
     @Column(nullable = false)
     private boolean enabled = true;
 
+    @Column(name = "group_id")
+    private String groupId;
+
     @Column(name = "created_at")
     private Instant createdAt = Instant.now();
 
@@ -48,6 +51,8 @@ public class User {
     public void setRole(Role role) { this.role = role; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
+    public String getGroupId() { return groupId; }
+    public void setGroupId(String groupId) { this.groupId = groupId; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 }

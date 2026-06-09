@@ -2,6 +2,10 @@
 package com.nexarank.api.controller;
 
 import com.nexarank.api.model.User;
+import com.nexarank.api.repository.UserGroupRepository;
+import com.nexarank.api.repository.GroupPermissionRepository;
+import java.util.List;
+import java.util.stream.Collectors;
 import com.nexarank.api.security.JwtUtil;
 import com.nexarank.api.service.UserService;
 import org.springframework.http.HttpStatus;
@@ -19,10 +23,16 @@ public class AuthController {
 
     private final UserService userService;
     private final JwtUtil jwtUtil;
+    private final UserGroupRepository userGroupRepository;
+    private final GroupPermissionRepository groupPermissionRepository;
 
-    public AuthController(UserService userService, JwtUtil jwtUtil) {
+    public AuthController(UserService userService, JwtUtil jwtUtil,
+                          UserGroupRepository userGroupRepository,
+                          GroupPermissionRepository groupPermissionRepository) {
         this.userService = userService;
         this.jwtUtil = jwtUtil;
+        this.userGroupRepository = userGroupRepository;
+        this.groupPermissionRepository = groupPermissionRepository;
     }
 
     @PostMapping("/login")
@@ -36,13 +46,22 @@ public class AuthController {
                 .map(user -> {
                     String tenantId = user.getTenantId() != null ? user.getTenantId() : "default";
                     String projectId = "main";
-                    String token = jwtUtil.generateToken(user.getUsername(), user.getRole().name(), tenantId, projectId);
+                    // Load group permissions
+                    List<String> permissions = List.of();
+                    if (user.getGroupId() != null) {
+                        permissions = groupPermissionRepository.findByGroupId(user.getGroupId())
+                                .stream().map(gp -> gp.getPermission().name()).collect(Collectors.toList());
+                    }
+                    String token = jwtUtil.generateToken(user.getUsername(), user.getRole().name(), tenantId, projectId, permissions);
+                    final List<String> finalPermissions = permissions;
                     return ResponseEntity.ok(Map.of(
                             "token", token,
                             "username", user.getUsername(),
                             "role", user.getRole().name(),
                             "tenantId", tenantId,
-                            "projectId", projectId
+                            "projectId", projectId,
+                            "groupId", user.getGroupId() != null ? user.getGroupId() : "",
+                            "permissions", finalPermissions
                     ));
                 })
                 .orElse(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
