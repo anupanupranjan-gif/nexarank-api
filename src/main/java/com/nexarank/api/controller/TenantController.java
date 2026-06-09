@@ -75,6 +75,33 @@ public class TenantController {
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
 
+    // Public endpoint — no auth required, called before login
+    @GetMapping("/public/tenants/{id}/branding")
+    public ResponseEntity<?> getBranding(@PathVariable String id) {
+        return tenantRepository.findById(id)
+                .map(t -> ResponseEntity.ok(Map.of(
+                        "tenantId", t.getId(),
+                        "displayName", t.getDisplayName(),
+                        "logoUrl", t.getLogoUrl() != null ? t.getLogoUrl() : "",
+                        "brandColor", t.getBrandColor() != null ? t.getBrandColor() : "#0077ff"
+                )))
+                .orElse(ResponseEntity.ok(Map.of(
+                        "tenantId", id,
+                        "displayName", "NexaRank",
+                        "logoUrl", "",
+                        "brandColor", "#0077ff"
+                )));
+    }
+
+    @PutMapping("/tenants/{id}/branding")
+    public ResponseEntity<?> updateBranding(@PathVariable String id, @RequestBody Map<String, String> body) {
+        return tenantRepository.findById(id).map(tenant -> {
+            if (body.containsKey("logoUrl")) tenant.setLogoUrl(body.get("logoUrl"));
+            if (body.containsKey("brandColor")) tenant.setBrandColor(body.get("brandColor"));
+            return ResponseEntity.ok(tenantRepository.save(tenant));
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
     @PutMapping("/tenants/{id}")
     public ResponseEntity<?> updateTenant(@PathVariable String id, @RequestBody Map<String, String> body) {
         return tenantRepository.findById(id).map(tenant -> {

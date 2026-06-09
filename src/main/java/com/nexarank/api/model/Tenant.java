@@ -17,6 +17,12 @@ public class Tenant {
     @Column(nullable = false)
     private boolean enabled = true;
 
+    @Column(name = "logo_url")
+    private String logoUrl;
+
+    @Column(name = "brand_color")
+    private String brandColor = "#0077ff";
+
     @Column(name = "created_at")
     private Instant createdAt = Instant.now();
 
@@ -26,6 +32,10 @@ public class Tenant {
     public void setDisplayName(String displayName) { this.displayName = displayName; }
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
+    public String getLogoUrl() { return logoUrl; }
+    public void setLogoUrl(String logoUrl) { this.logoUrl = logoUrl; }
+    public String getBrandColor() { return brandColor; }
+    public void setBrandColor(String brandColor) { this.brandColor = brandColor; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 }

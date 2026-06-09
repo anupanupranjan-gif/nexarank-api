@@ -31,6 +31,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // public endpoints
                 .requestMatchers("/api/v1/auth/login").permitAll()
+                .requestMatchers("/api/v1/admin/public/**").permitAll()
                 .requestMatchers("/api/v1/auth/register").hasRole("ADMIN")
                 .requestMatchers("/actuator/health").permitAll()
                 // rule enrichment — public, called by customer search services
