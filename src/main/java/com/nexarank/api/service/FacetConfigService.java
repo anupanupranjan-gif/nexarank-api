@@ -34,6 +34,8 @@ public class FacetConfigService {
 
     public FacetConfig createFacet(FacetConfig facet) {
         if (facet.getId() == null) facet.setId(UUID.randomUUID().toString());
+        if (facet.getTenantId() == null) facet.setTenantId(TenantContext.getTenantId());
+        if (facet.getProjectId() == null) facet.setProjectId(TenantContext.getProjectId());
         if (repository.existsByFieldName(facet.getFieldName())) {
             throw new IllegalArgumentException("Facet already exists for field: " + facet.getFieldName());
         }
