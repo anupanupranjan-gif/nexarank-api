@@ -39,6 +39,9 @@ public class SearchEngineConfigService {
         // Only one config per NexaRank instance (single tenant for now)
         // In multi-tenant Phase 23 this becomes per-tenant
         getConfig().ifPresent(existing -> config.setId(existing.getId()));
+        if (config.getId() == null) config.setId(UUID.randomUUID().toString());
+        if (config.getTenantId() == null) config.setTenantId(TenantContext.getTenantId());
+        if (config.getProjectId() == null) config.setProjectId(TenantContext.getProjectId());
 
         if (config.getCreatedAt() == null) {
             config.setCreatedAt(Instant.now());

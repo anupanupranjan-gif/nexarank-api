@@ -9,6 +9,7 @@ import java.time.Instant;
 public class SearchEngineConfig {
 
     @Id
+    @Column(name = "id")
     private String id;
 
     @Column(name = "tenant_id", nullable = false)
