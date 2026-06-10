@@ -86,4 +86,13 @@ public class EnrichedQuery {
 
     public long getProcessingMs() { return processingMs; }
     public void setProcessingMs(long ms) { this.processingMs = ms; }
+
+    // A/B test context — present when a test is active for this query
+    private String abTestId;
+    private String abVariant;  // "A" or "B"
+
+    public String getAbTestId() { return abTestId; }
+    public void setAbTestId(String abTestId) { this.abTestId = abTestId; }
+    public String getAbVariant() { return abVariant; }
+    public void setAbVariant(String abVariant) { this.abVariant = abVariant; }
 }

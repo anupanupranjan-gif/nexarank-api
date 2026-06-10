@@ -20,13 +20,16 @@ public class RuleEnrichmentService {
     private final MerchRuleService ruleService;
     private final SearchEngineConfigService configService;
     private final SearchEngineAdapterFactory adapterFactory;
+    private final RuleAbTestService abTestService;
 
     public RuleEnrichmentService(MerchRuleService ruleService,
                                   SearchEngineConfigService configService,
-                                  SearchEngineAdapterFactory adapterFactory) {
-        this.ruleService = ruleService;
-        this.configService = configService;
+                                  SearchEngineAdapterFactory adapterFactory,
+                                  RuleAbTestService abTestService) {
+        this.ruleService    = ruleService;
+        this.configService  = configService;
         this.adapterFactory = adapterFactory;
+        this.abTestService  = abTestService;
     }
 
     /**
@@ -42,55 +45,67 @@ public class RuleEnrichmentService {
      * @param zone       search zone (search-results, category, etc.)
      */
     public EnrichedQuery enrich(String query, String engineType, String zone) {
+        return enrich(query, engineType, zone, null);
+    }
+
+    public EnrichedQuery enrich(String query, String engineType, String zone, String sessionId) {
         long start = System.currentTimeMillis();
 
-        // Step 1: Get matching approved rules
-        List<MerchRule> rules = ruleService.getRulesByQuery(query);
-
-        if (rules.isEmpty()) {
-            log.debug("No rules found for query='{}', returning passthrough", query);
-            return passthroughResult(query, engineType, start);
+        // Check for active A/B test first
+        var abContext = abTestService.resolveVariant(query, sessionId);
+        if (abContext.isPresent()) {
+            String abTestId  = abContext.get().testId();
+            String abVariant = abContext.get().variant();
+            abTestService.recordImpression(abTestId, abVariant);
+            List<MerchRule> rules = ruleService.getById(abContext.get().ruleId())
+                    .map(List::of).orElse(List.of());
+            if (!rules.isEmpty()) {
+                EnrichedQuery result = buildResult(query, engineType, zone, rules, start);
+                result.setAbTestId(abTestId);
+                result.setAbVariant(abVariant);
+                return result;
+            }
         }
 
-        log.debug("Found {} rules for query='{}'", rules.size(), query);
+        // Normal path
+        List<MerchRule> rules = ruleService.getRulesByQuery(query);
+        if (rules.isEmpty()) {
+            log.debug("No rules found for query=\'{}\', returning passthrough", query);
+            return passthroughResult(query, engineType, start);
+        }
+        return buildResult(query, engineType, zone, rules, start);
+    }
 
-        // Step 2: Get search engine config
+    private EnrichedQuery buildResult(String query, String engineType, String zone,
+                                       List<MerchRule> rules, long start) {
+        log.debug("Found {} rules for query=\'{\'}", rules.size(), query);
         SearchEngineConfig config = configService.getConfig().orElse(null);
-
         if (config == null) {
-            // No config stored — return engine-agnostic result with rules applied
             log.warn("No search engine config found, returning agnostic enrichment");
             return agnosticEnrichment(query, rules, engineType, start);
         }
-
-        // Override engine type if caller specified one
         if (engineType != null) {
             try {
                 config.setEngineType(SearchEngineConfig.EngineType.valueOf(engineType.toUpperCase()));
             } catch (IllegalArgumentException e) {
-                log.warn("Unknown engine type '{}', using stored config type", engineType);
+                log.warn("Unknown engine type \'{}\', using stored config type", engineType);
             }
         }
-
-        // Step 3: Pick adapter and translate
         try {
             SearchEnginePort adapter = adapterFactory.getAdapter(config);
             EnrichedQuery result = adapter.translateRules(query, rules, config);
             result.setProcessingMs(System.currentTimeMillis() - start);
-
-            log.info("Enriched query='{}' engine={} rules={} ms={}",
+            log.info("Enriched query=\'{}\' engine={} rules={} ms={}",
                 query, config.getEngineType(),
                 result.getAppliedRules().size(), result.getProcessingMs());
-
             return result;
-
         } catch (Exception e) {
-            log.error("Rule translation failed for query='{}': {}", query, e.getMessage(), e);
+            log.error("Rule translation failed for query=\'{}\': {}", query, e.getMessage(), e);
             return passthroughResult(query, engineType, start);
         }
     }
 
-    private EnrichedQuery passthroughResult(String query, String engineType, long start) {
+        private EnrichedQuery passthroughResult(String query, String engineType, long start) {
         EnrichedQuery result = new EnrichedQuery();
         result.setOriginalQuery(query);
         result.setExpandedQuery(query);

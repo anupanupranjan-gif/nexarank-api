@@ -42,12 +42,13 @@ public class RuleEnrichmentController {
         String query      = request.getOrDefault("query", "");
         String engineType = request.get("engineType");
         String zone       = request.getOrDefault("zone", "search-results");
+        String sessionId  = request.get("sessionId");
 
         if (query.isBlank()) {
             return ResponseEntity.badRequest().build();
         }
 
-        EnrichedQuery result = enrichmentService.enrich(query, engineType, zone);
+        EnrichedQuery result = enrichmentService.enrich(query, engineType, zone, sessionId);
         return ResponseEntity.ok(result);
     }
 
@@ -61,13 +62,14 @@ public class RuleEnrichmentController {
     public ResponseEntity<EnrichedQuery> enrichGet(
             @RequestParam String query,
             @RequestParam(required = false) String engineType,
-            @RequestParam(defaultValue = "search-results") String zone) {
+            @RequestParam(defaultValue = "search-results") String zone,
+            @RequestParam(required = false) String sessionId) {
 
         if (query.isBlank()) {
             return ResponseEntity.badRequest().build();
         }
 
-        EnrichedQuery result = enrichmentService.enrich(query, engineType, zone);
+        EnrichedQuery result = enrichmentService.enrich(query, engineType, zone, sessionId);
         return ResponseEntity.ok(result);
     }
 }

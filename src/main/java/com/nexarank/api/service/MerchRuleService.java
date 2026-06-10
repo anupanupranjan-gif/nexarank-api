@@ -24,9 +24,11 @@ public class MerchRuleService {
     private static final Logger log = LoggerFactory.getLogger(MerchRuleService.class);
 
     private final MerchRuleRepository repository;
+    private final RuleVersionService versionService;
 
-    public MerchRuleService(MerchRuleRepository repository) {
+    public MerchRuleService(MerchRuleRepository repository, RuleVersionService versionService) {
         this.repository = repository;
+        this.versionService = versionService;
     }
 
     public List<MerchRule> getAllRules() {
@@ -66,6 +68,7 @@ public class MerchRuleService {
         rule.setCreatedAt(Instant.now());
         rule.setUpdatedAt(Instant.now());
         MerchRule saved = repository.save(rule);
+        versionService.snapshot(saved, currentUser, "Rule created");
         log.info("RULE_CREATED type={} query={} by={}", rule.getType(), rule.getQuery(), rule.getSubmittedBy());
         return saved;
     }
@@ -77,12 +80,16 @@ public class MerchRuleService {
     public Optional<MerchRule> updateRule(String id, MerchRule updated) {
         return repository.findById(id).map(existing -> {
             updated.setId(existing.getId());
+            updated.setTenantId(existing.getTenantId());
+            updated.setProjectId(existing.getProjectId());
             updated.setSubmittedBy(existing.getSubmittedBy());
             updated.setStatus(MerchRule.RuleStatus.PENDING_REVIEW);
             updated.setEnabled(false);
             updated.setCreatedAt(existing.getCreatedAt());
             updated.setUpdatedAt(Instant.now());
-            return repository.save(updated);
+            MerchRule saved = repository.save(updated);
+            versionService.snapshot(saved, getCurrentUsername(), "Rule updated");
+            return saved;
         });
     }
 
@@ -95,6 +102,8 @@ public class MerchRuleService {
             rule.setReviewComment(comment);
             rule.setUpdatedAt(Instant.now());
             MerchRule saved = repository.save(rule);
+            versionService.snapshot(saved, currentUser,
+                    comment == null || comment.isBlank() ? "Rule approved" : "Rule approved: " + comment);
             log.info("RULE_APPROVED id={} query={} by={} comment={}", rule.getId(), rule.getQuery(), rule.getApprovedBy(), comment);
             return saved;
         });
@@ -109,6 +118,8 @@ public class MerchRuleService {
             rule.setReviewComment(comment);
             rule.setUpdatedAt(Instant.now());
             MerchRule saved = repository.save(rule);
+            versionService.snapshot(saved, currentUser,
+                    comment == null || comment.isBlank() ? "Rule rejected" : "Rule rejected: " + comment);
             log.info("RULE_REJECTED id={} query={} by={} comment={}", rule.getId(), rule.getQuery(), rule.getApprovedBy(), comment);
             return saved;
         });
@@ -126,6 +137,21 @@ public class MerchRuleService {
         repository.deleteById(id);
     }
 
+    public Optional<MerchRule> rollbackRule(String id, int versionNumber) {
+        String currentUser = getCurrentUsername();
+        return repository.findById(id)
+                .flatMap(current -> versionService.applyRollback(current, versionNumber))
+                .map(restored -> {
+                    restored.setStatus(MerchRule.RuleStatus.PENDING_REVIEW);
+                    restored.setEnabled(false);
+                    restored.setUpdatedAt(Instant.now());
+                    MerchRule saved = repository.save(restored);
+                    versionService.snapshot(saved, currentUser, "Restored from v" + versionNumber);
+                    log.info("RULE_ROLLBACK id={} toVersion={} by={}", id, versionNumber, currentUser);
+                    return saved;
+                });
+    }
+
     public List<Map<String, Object>> detectConflicts(String query) {
         String tenantId = TenantContext.getTenantId();
         String projectId = TenantContext.getProjectId();
@@ -134,7 +160,6 @@ public class MerchRuleService {
 
         List<Map<String, Object>> conflicts = new ArrayList<>();
 
-        // Check conflicts between rule types
         boolean hasPin = rules.stream().anyMatch(r -> r.getType() == MerchRule.RuleType.PIN &&
                 r.getStatus() == MerchRule.RuleStatus.APPROVED);
         boolean hasBoost = rules.stream().anyMatch(r -> r.getType() == MerchRule.RuleType.BOOST &&
@@ -167,7 +192,6 @@ public class MerchRuleService {
             conflicts.add(conflict);
         }
 
-        // Check duplicate rule types
         rules.stream()
             .filter(r -> r.getStatus() == MerchRule.RuleStatus.APPROVED)
             .collect(java.util.stream.Collectors.groupingBy(MerchRule::getType))
@@ -189,7 +213,6 @@ public class MerchRuleService {
         String tenantId = TenantContext.getTenantId();
         String projectId = TenantContext.getProjectId();
 
-        // Get existing active rules for this query
         List<MerchRule> existing = repository.findByTenantIdAndProjectIdAndQueryAndEnabled(
                 tenantId, projectId, rule.getQuery(), true)
                 .stream()
@@ -215,6 +238,16 @@ public class MerchRuleService {
         preview.put("willApply", rule.getStatus() == null || rule.getStatus() != MerchRule.RuleStatus.REJECTED);
 
         return preview;
+    }
+
+
+    /**
+     * Direct save — bypasses approval workflow.
+     * Only used internally (A/B test winner promotion, archival).
+     */
+    public MerchRule saveDirectly(MerchRule rule) {
+        rule.setUpdatedAt(java.time.Instant.now());
+        return repository.save(rule);
     }
 
     private String getCurrentUsername() {
