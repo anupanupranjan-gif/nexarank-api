@@ -25,15 +25,21 @@ public class MerchRuleService {
 
     private final MerchRuleRepository repository;
     private final RuleVersionService versionService;
+    private final RuleTriggerConditionService triggerService;
 
-    public MerchRuleService(MerchRuleRepository repository, RuleVersionService versionService) {
-        this.repository = repository;
+    public MerchRuleService(MerchRuleRepository repository,
+                             RuleVersionService versionService,
+                             RuleTriggerConditionService triggerService) {
+        this.repository     = repository;
         this.versionService = versionService;
+        this.triggerService = triggerService;
     }
 
     public List<MerchRule> getAllRules() {
-        return repository.findByTenantIdAndProjectId(
+        List<MerchRule> rules = repository.findByTenantIdAndProjectId(
                 TenantContext.getTenantId(), TenantContext.getProjectId());
+        rules.forEach(r -> r.setTriggerConditions(triggerService.getConditions(r.getId())));
+        return rules;
     }
 
     public List<MerchRule> getPendingRules() {
@@ -69,12 +75,23 @@ public class MerchRuleService {
         rule.setUpdatedAt(Instant.now());
         MerchRule saved = repository.save(rule);
         versionService.snapshot(saved, currentUser, "Rule created");
+        if (rule.getTriggerConditions() != null && !rule.getTriggerConditions().isEmpty()) {
+            java.util.List<java.util.Map<String, Object>> dtos = rule.getTriggerConditions().stream()
+                    .map(c -> { java.util.Map<String, Object> d = new java.util.HashMap<>();
+                        d.put("facetField", c.getFacetField());
+                        d.put("facetValues", c.getFacetValues());
+                        return d; }).toList();
+            triggerService.saveConditions(saved.getId(), dtos);
+        }
         log.info("RULE_CREATED type={} query={} by={}", rule.getType(), rule.getQuery(), rule.getSubmittedBy());
         return saved;
     }
 
     public Optional<MerchRule> getById(String id) {
-        return repository.findById(id);
+        return repository.findById(id).map(rule -> {
+            rule.setTriggerConditions(triggerService.getConditions(id));
+            return rule;
+        });
     }
 
     public Optional<MerchRule> updateRule(String id, MerchRule updated) {
@@ -89,6 +106,14 @@ public class MerchRuleService {
             updated.setUpdatedAt(Instant.now());
             MerchRule saved = repository.save(updated);
             versionService.snapshot(saved, getCurrentUsername(), "Rule updated");
+            if (updated.getTriggerConditions() != null) {
+                java.util.List<java.util.Map<String, Object>> dtos = updated.getTriggerConditions().stream()
+                        .map(c -> { java.util.Map<String, Object> d = new java.util.HashMap<>();
+                            d.put("facetField", c.getFacetField());
+                            d.put("facetValues", c.getFacetValues());
+                            return d; }).toList();
+                triggerService.saveConditions(saved.getId(), dtos);
+            }
             return saved;
         });
     }
@@ -240,44 +265,27 @@ public class MerchRuleService {
         return preview;
     }
 
-
-
+    
     public List<MerchRule> getRulesByQueryAndFacets(String query,
                                                      java.util.Map<String, String> selectedFacets) {
-        Instant now = Instant.now();
+        Instant now      = Instant.now();
         String tenantId  = TenantContext.getTenantId();
         String projectId = TenantContext.getProjectId();
+        boolean isWildcard = query == null || query.isBlank() || query.equals("*");
 
         return repository.findByTenantIdAndProjectId(tenantId, projectId).stream()
                 .filter(r -> r.getStatus() == MerchRule.RuleStatus.APPROVED && r.isEnabled())
                 .filter(r -> r.getActivateAt() == null || r.getActivateAt().isBefore(now))
                 .filter(r -> r.getExpireAt() == null || r.getExpireAt().isAfter(now))
-                .filter(r -> matchesTrigger(r, query, selectedFacets))
+                .filter(r -> {
+                    boolean queryMatches = !r.isRequireQuery()
+                            || isWildcard
+                            || (query != null && query.equalsIgnoreCase(r.getQuery()));
+                    if (!queryMatches) return false;
+                    return triggerService.conditionsMatch(r.getId(),
+                            selectedFacets != null ? selectedFacets : java.util.Map.of());
+                })
                 .toList();
-    }
-
-    private boolean matchesTrigger(MerchRule rule, String query,
-                                    java.util.Map<String, String> selectedFacets) {
-        MerchRule.TriggerType trigger = rule.getTriggerType();
-        if (trigger == null) trigger = MerchRule.TriggerType.QUERY_ONLY;
-        switch (trigger) {
-            case QUERY_ONLY:
-                return query != null && query.equalsIgnoreCase(rule.getQuery());
-            case FACET_SELECTED:
-                return facetMatches(rule, selectedFacets);
-            case FACET_AND_QUERY:
-                return query != null && query.equalsIgnoreCase(rule.getQuery())
-                        && facetMatches(rule, selectedFacets);
-            default:
-                return false;
-        }
-    }
-
-    private boolean facetMatches(MerchRule rule, java.util.Map<String, String> selectedFacets) {
-        if (rule.getTriggerFacetField() == null || rule.getTriggerFacetValue() == null) return false;
-        if (selectedFacets == null || selectedFacets.isEmpty()) return false;
-        String selected = selectedFacets.get(rule.getTriggerFacetField());
-        return rule.getTriggerFacetValue().equalsIgnoreCase(selected);
     }
 
         /**

@@ -50,15 +50,9 @@ public class MerchRule {
     @Column(nullable = false)
     private boolean enabled = true;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "trigger_type", nullable = false)
-    private TriggerType triggerType = TriggerType.QUERY_ONLY;
+    @Column(name = "require_query", nullable = false)
+    private boolean requireQuery = true;
 
-    @Column(name = "trigger_facet_field")
-    private String triggerFacetField;
-
-    @Column(name = "trigger_facet_value")
-    private String triggerFacetValue;
 
     @Column(name = "submitted_by")
     private String submittedBy;
@@ -90,12 +84,6 @@ public class MerchRule {
     public enum RuleType { BOOST, PIN, BURY, SYNONYM }
 
     public enum RuleStatus { DRAFT, PENDING_REVIEW, APPROVED, REJECTED, DISABLED }
-
-    public enum TriggerType {
-        QUERY_ONLY,
-        FACET_SELECTED,
-        FACET_AND_QUERY
-    }
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -143,10 +131,17 @@ public class MerchRule {
     public void setPinnedIds(List<String> pinnedIds) { this.pinnedIds = pinnedIds; }
     public List<String> getSynonyms() { return synonyms; }
     public void setSynonyms(List<String> synonyms) { this.synonyms = synonyms; }
-    public TriggerType getTriggerType() { return triggerType; }
-    public void setTriggerType(TriggerType triggerType) { this.triggerType = triggerType; }
-    public String getTriggerFacetField() { return triggerFacetField; }
-    public void setTriggerFacetField(String triggerFacetField) { this.triggerFacetField = triggerFacetField; }
-    public String getTriggerFacetValue() { return triggerFacetValue; }
-    public void setTriggerFacetValue(String triggerFacetValue) { this.triggerFacetValue = triggerFacetValue; }
+    public boolean isRequireQuery() { return requireQuery; }
+    public void setRequireQuery(boolean requireQuery) { this.requireQuery = requireQuery; }
+
+    @Transient
+    private java.util.List<com.nexarank.api.model.RuleTriggerCondition> triggerConditions;
+
+    public java.util.List<com.nexarank.api.model.RuleTriggerCondition> getTriggerConditions() {
+        return triggerConditions;
+    }
+    public void setTriggerConditions(
+            java.util.List<com.nexarank.api.model.RuleTriggerCondition> triggerConditions) {
+        this.triggerConditions = triggerConditions;
+    }
 }

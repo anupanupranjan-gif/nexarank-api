@@ -69,26 +69,19 @@ public class RuleEnrichmentService {
                     .map(List::of).orElse(List.of());
         }
 
-        // Facet-triggered rules — always evaluated when selectedFacets present
-        List<MerchRule> facetRules = List.of();
-        if (selectedFacets != null && !selectedFacets.isEmpty()) {
-            facetRules = ruleService.getRulesByQueryAndFacets(query, selectedFacets)
-                    .stream()
-                    .filter(r -> r.getTriggerType() != MerchRule.TriggerType.QUERY_ONLY)
-                    .toList();
-        }
+        // Rule lookup — getRulesByQueryAndFacets handles both facet and non-facet cases
+        List<MerchRule> allMatchingRules = ruleService.getRulesByQueryAndFacets(
+                query, selectedFacets != null ? selectedFacets : java.util.Map.of());
 
-        // Merge: A/B variant rules + facet rules (deduplicated by id)
+        // Merge A/B variant rules with other matching rules (deduplicated by id)
         List<MerchRule> rules;
-        if (!abRules.isEmpty() || !facetRules.isEmpty()) {
+        if (!abRules.isEmpty()) {
             java.util.Map<String, MerchRule> merged = new java.util.LinkedHashMap<>();
             abRules.forEach(r -> merged.put(r.getId(), r));
-            facetRules.forEach(r -> merged.put(r.getId(), r));
+            allMatchingRules.forEach(r -> merged.put(r.getId(), r));
             rules = new java.util.ArrayList<>(merged.values());
-        } else if (selectedFacets != null && !selectedFacets.isEmpty()) {
-            rules = ruleService.getRulesByQueryAndFacets(query, selectedFacets);
         } else {
-            rules = ruleService.getRulesByQuery(query);
+            rules = allMatchingRules;
         }
 
         if (rules.isEmpty()) {
