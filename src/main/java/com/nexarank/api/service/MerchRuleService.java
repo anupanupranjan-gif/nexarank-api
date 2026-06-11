@@ -241,7 +241,46 @@ public class MerchRuleService {
     }
 
 
-    /**
+
+    public List<MerchRule> getRulesByQueryAndFacets(String query,
+                                                     java.util.Map<String, String> selectedFacets) {
+        Instant now = Instant.now();
+        String tenantId  = TenantContext.getTenantId();
+        String projectId = TenantContext.getProjectId();
+
+        return repository.findByTenantIdAndProjectId(tenantId, projectId).stream()
+                .filter(r -> r.getStatus() == MerchRule.RuleStatus.APPROVED && r.isEnabled())
+                .filter(r -> r.getActivateAt() == null || r.getActivateAt().isBefore(now))
+                .filter(r -> r.getExpireAt() == null || r.getExpireAt().isAfter(now))
+                .filter(r -> matchesTrigger(r, query, selectedFacets))
+                .toList();
+    }
+
+    private boolean matchesTrigger(MerchRule rule, String query,
+                                    java.util.Map<String, String> selectedFacets) {
+        MerchRule.TriggerType trigger = rule.getTriggerType();
+        if (trigger == null) trigger = MerchRule.TriggerType.QUERY_ONLY;
+        switch (trigger) {
+            case QUERY_ONLY:
+                return query != null && query.equalsIgnoreCase(rule.getQuery());
+            case FACET_SELECTED:
+                return facetMatches(rule, selectedFacets);
+            case FACET_AND_QUERY:
+                return query != null && query.equalsIgnoreCase(rule.getQuery())
+                        && facetMatches(rule, selectedFacets);
+            default:
+                return false;
+        }
+    }
+
+    private boolean facetMatches(MerchRule rule, java.util.Map<String, String> selectedFacets) {
+        if (rule.getTriggerFacetField() == null || rule.getTriggerFacetValue() == null) return false;
+        if (selectedFacets == null || selectedFacets.isEmpty()) return false;
+        String selected = selectedFacets.get(rule.getTriggerFacetField());
+        return rule.getTriggerFacetValue().equalsIgnoreCase(selected);
+    }
+
+        /**
      * Direct save — bypasses approval workflow.
      * Only used internally (A/B test winner promotion, archival).
      */

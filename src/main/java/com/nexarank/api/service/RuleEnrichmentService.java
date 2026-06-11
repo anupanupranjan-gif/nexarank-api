@@ -45,35 +45,64 @@ public class RuleEnrichmentService {
      * @param zone       search zone (search-results, category, etc.)
      */
     public EnrichedQuery enrich(String query, String engineType, String zone) {
-        return enrich(query, engineType, zone, null);
+        return enrich(query, engineType, zone, null, null);
     }
 
     public EnrichedQuery enrich(String query, String engineType, String zone, String sessionId) {
+        return enrich(query, engineType, zone, sessionId, null);
+    }
+
+    public EnrichedQuery enrich(String query, String engineType, String zone,
+                                 String sessionId, java.util.Map<String, String> selectedFacets) {
         long start = System.currentTimeMillis();
 
-        // Check for active A/B test first
+        // A/B test resolution — only applies to QUERY_ONLY rules
+        String abTestId  = null;
+        String abVariant = null;
+        List<MerchRule> abRules = List.of();
         var abContext = abTestService.resolveVariant(query, sessionId);
         if (abContext.isPresent()) {
-            String abTestId  = abContext.get().testId();
-            String abVariant = abContext.get().variant();
+            abTestId  = abContext.get().testId();
+            abVariant = abContext.get().variant();
             abTestService.recordImpression(abTestId, abVariant);
-            List<MerchRule> rules = ruleService.getById(abContext.get().ruleId())
+            abRules = ruleService.getById(abContext.get().ruleId())
                     .map(List::of).orElse(List.of());
-            if (!rules.isEmpty()) {
-                EnrichedQuery result = buildResult(query, engineType, zone, rules, start);
-                result.setAbTestId(abTestId);
-                result.setAbVariant(abVariant);
-                return result;
-            }
         }
 
-        // Normal path
-        List<MerchRule> rules = ruleService.getRulesByQuery(query);
+        // Facet-triggered rules — always evaluated when selectedFacets present
+        List<MerchRule> facetRules = List.of();
+        if (selectedFacets != null && !selectedFacets.isEmpty()) {
+            facetRules = ruleService.getRulesByQueryAndFacets(query, selectedFacets)
+                    .stream()
+                    .filter(r -> r.getTriggerType() != MerchRule.TriggerType.QUERY_ONLY)
+                    .toList();
+        }
+
+        // Merge: A/B variant rules + facet rules (deduplicated by id)
+        List<MerchRule> rules;
+        if (!abRules.isEmpty() || !facetRules.isEmpty()) {
+            java.util.Map<String, MerchRule> merged = new java.util.LinkedHashMap<>();
+            abRules.forEach(r -> merged.put(r.getId(), r));
+            facetRules.forEach(r -> merged.put(r.getId(), r));
+            rules = new java.util.ArrayList<>(merged.values());
+        } else if (selectedFacets != null && !selectedFacets.isEmpty()) {
+            rules = ruleService.getRulesByQueryAndFacets(query, selectedFacets);
+        } else {
+            rules = ruleService.getRulesByQuery(query);
+        }
+
         if (rules.isEmpty()) {
-            log.debug("No rules found for query=\'{}\', returning passthrough", query);
+            log.debug("No rules found for query=\'{}\' facets={}, returning passthrough",
+                    query, selectedFacets);
             return passthroughResult(query, engineType, start);
         }
-        return buildResult(query, engineType, zone, rules, start);
+
+        EnrichedQuery result = buildResult(query, engineType, zone, rules, start);
+        if (abTestId != null) {
+            result.setAbTestId(abTestId);
+            result.setAbVariant(abVariant);
+        }
+        return result;
     }
 
     private EnrichedQuery buildResult(String query, String engineType, String zone,

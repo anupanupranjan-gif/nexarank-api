@@ -37,18 +37,28 @@ public class RuleEnrichmentController {
      */
     @PostMapping("/enrich")
     public ResponseEntity<EnrichedQuery> enrich(
-            @RequestBody Map<String, String> request) {
+            @RequestBody Map<String, Object> request) {
 
-        String query      = request.getOrDefault("query", "");
-        String engineType = request.get("engineType");
-        String zone       = request.getOrDefault("zone", "search-results");
-        String sessionId  = request.get("sessionId");
+        String query      = (String) request.getOrDefault("query", "");
+        String engineType = (String) request.get("engineType");
+        String zone       = (String) request.getOrDefault("zone", "search-results");
+        String sessionId  = (String) request.get("sessionId");
+        java.util.Map<String, String> selectedFacets = null;
+        Object facetsRaw = request.get("selectedFacets");
+        if (facetsRaw instanceof java.util.Map) {
+            selectedFacets = new java.util.HashMap<>();
+            for (java.util.Map.Entry<?, ?> e : ((java.util.Map<?, ?>) facetsRaw).entrySet()) {
+                if (e.getKey() != null && e.getValue() != null) {
+                    selectedFacets.put(e.getKey().toString(), e.getValue().toString());
+                }
+            }
+        }
 
         if (query.isBlank()) {
             return ResponseEntity.badRequest().build();
         }
 
-        EnrichedQuery result = enrichmentService.enrich(query, engineType, zone, sessionId);
+        EnrichedQuery result = enrichmentService.enrich(query, engineType, zone, sessionId, selectedFacets);
         return ResponseEntity.ok(result);
     }
 
@@ -63,13 +73,21 @@ public class RuleEnrichmentController {
             @RequestParam String query,
             @RequestParam(required = false) String engineType,
             @RequestParam(defaultValue = "search-results") String zone,
-            @RequestParam(required = false) String sessionId) {
+            @RequestParam(required = false) String sessionId,
+            @RequestParam java.util.Map<String, String> allParams) {
 
         if (query.isBlank()) {
             return ResponseEntity.badRequest().build();
         }
 
-        EnrichedQuery result = enrichmentService.enrich(query, engineType, zone, sessionId);
+        java.util.Map<String, String> selectedFacets = allParams.entrySet().stream()
+                .filter(e -> e.getKey().startsWith("facet_"))
+                .collect(java.util.stream.Collectors.toMap(
+                        e -> e.getKey().substring(6),
+                        java.util.Map.Entry::getValue));
+
+        EnrichedQuery result = enrichmentService.enrich(query, engineType, zone, sessionId,
+                selectedFacets.isEmpty() ? null : selectedFacets);
         return ResponseEntity.ok(result);
     }
 }
