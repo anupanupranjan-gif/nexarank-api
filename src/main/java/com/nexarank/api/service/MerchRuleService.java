@@ -38,7 +38,10 @@ public class MerchRuleService {
     public List<MerchRule> getAllRules() {
         List<MerchRule> rules = repository.findByTenantIdAndProjectId(
                 TenantContext.getTenantId(), TenantContext.getProjectId());
-        rules.forEach(r -> r.setTriggerConditions(triggerService.getConditions(r.getId())));
+        rules.forEach(r -> {
+            r.setTriggerConditions(triggerService.getConditions(r.getId()));
+            deserializeTransientFields(r);
+        });
         return rules;
     }
 
@@ -73,6 +76,7 @@ public class MerchRuleService {
         rule.setEnabled(false);
         rule.setCreatedAt(Instant.now());
         rule.setUpdatedAt(Instant.now());
+        serializeTransientFields(rule);
         MerchRule saved = repository.save(rule);
         versionService.snapshot(saved, currentUser, "Rule created");
         if (rule.getTriggerConditions() != null && !rule.getTriggerConditions().isEmpty()) {
@@ -90,6 +94,7 @@ public class MerchRuleService {
     public Optional<MerchRule> getById(String id) {
         return repository.findById(id).map(rule -> {
             rule.setTriggerConditions(triggerService.getConditions(id));
+            deserializeTransientFields(rule);
             return rule;
         });
     }
@@ -104,6 +109,7 @@ public class MerchRuleService {
             updated.setEnabled(false);
             updated.setCreatedAt(existing.getCreatedAt());
             updated.setUpdatedAt(Instant.now());
+            serializeTransientFields(updated);
             MerchRule saved = repository.save(updated);
             versionService.snapshot(saved, getCurrentUsername(), "Rule updated");
             if (updated.getTriggerConditions() != null) {
@@ -295,6 +301,38 @@ public class MerchRuleService {
     public MerchRule saveDirectly(MerchRule rule) {
         rule.setUpdatedAt(java.time.Instant.now());
         return repository.save(rule);
+    }
+
+    private void deserializeTransientFields(MerchRule rule) {
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper =
+                    new com.fasterxml.jackson.databind.ObjectMapper();
+            if (rule.getPinnedIdsJson() != null && !rule.getPinnedIdsJson().isBlank()) {
+                rule.setPinnedIds(mapper.readValue(rule.getPinnedIdsJson(),
+                        new com.fasterxml.jackson.core.type.TypeReference<java.util.List<String>>() {}));
+            }
+            if (rule.getSynonymsJson() != null && !rule.getSynonymsJson().isBlank()) {
+                rule.setSynonyms(mapper.readValue(rule.getSynonymsJson(),
+                        new com.fasterxml.jackson.core.type.TypeReference<java.util.List<String>>() {}));
+            }
+        } catch (Exception e) {
+            log.warn("Failed to deserialize transient fields for rule {}: {}", rule.getId(), e.getMessage());
+        }
+    }
+
+    private void serializeTransientFields(MerchRule rule) {
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper =
+                    new com.fasterxml.jackson.databind.ObjectMapper();
+            if (rule.getPinnedIds() != null && !rule.getPinnedIds().isEmpty()) {
+                rule.setPinnedIdsJson(mapper.writeValueAsString(rule.getPinnedIds()));
+            }
+            if (rule.getSynonyms() != null && !rule.getSynonyms().isEmpty()) {
+                rule.setSynonymsJson(mapper.writeValueAsString(rule.getSynonyms()));
+            }
+        } catch (Exception e) {
+            log.warn("Failed to serialize transient fields for rule {}: {}", rule.getId(), e.getMessage());
+        }
     }
 
     private String getCurrentUsername() {
