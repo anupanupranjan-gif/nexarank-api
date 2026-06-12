@@ -13,10 +13,14 @@ public interface ClickEventRepository extends JpaRepository<ClickEvent, String> 
     List<ClickEvent> findByTenantIdAndProjectIdOrderByClickedAtDesc(
             String tenantId, String projectId);
 
-    @Query("SELECT c.query, COUNT(c) as clicks, COUNT(DISTINCT c.sessionId) as impressions " +
-           "FROM ClickEvent c WHERE c.tenantId = :tenantId AND c.projectId = :projectId " +
-           "AND c.clickedAt >= :since " +
-           "GROUP BY c.query ORDER BY impressions DESC")
+    @Query(value = "SELECT c.query, COUNT(c.id) as clicks, COALESCE(s.impressions, 0) as impressions " +
+           "FROM click_events c " +
+           "LEFT JOIN (SELECT query, COUNT(*) as impressions FROM search_events " +
+           "WHERE tenant_id = :tenantId AND project_id = :projectId AND searched_at >= :since " +
+           "GROUP BY query) s ON c.query = s.query " +
+           "WHERE c.tenant_id = :tenantId AND c.project_id = :projectId " +
+           "AND c.clicked_at >= :since " +
+           "GROUP BY c.query, s.impressions ORDER BY impressions DESC", nativeQuery = true)
     List<Object[]> findQueryStats(@Param("tenantId") String tenantId,
                                    @Param("projectId") String projectId,
                                    @Param("since") Instant since);
