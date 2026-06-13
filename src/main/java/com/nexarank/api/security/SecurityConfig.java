@@ -66,6 +66,11 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/ab-tests/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/v1/ab-tests/**").hasAnyRole("MERCHANDISER", "APPROVER", "ADMIN")
                 .requestMatchers("/api/v1/suggestions/**").hasAnyRole("ADMIN", "APPROVER", "MERCHANDISER")
+                // pipeline config — stopwords, stage config
+                .requestMatchers(HttpMethod.GET, "/api/v1/pipeline/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/pipeline/**").hasAnyRole("MERCHANDISER", "APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/pipeline/**").hasAnyRole("APPROVER", "ADMIN")
+                .anyRequest().authenticated()   // ← add this line
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 

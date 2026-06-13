@@ -286,7 +286,7 @@ public class MerchRuleService {
                 .filter(r -> {
                     boolean queryMatches = !r.isRequireQuery()
                             || isWildcard
-                            || (query != null && query.equalsIgnoreCase(r.getQuery()));
+                            || (query != null && containsRuleQuery(query, r.getQuery()));
                     if (!queryMatches) return false;
                     return triggerService.conditionsMatch(r.getId(),
                             selectedFacets != null ? selectedFacets : java.util.Map.of());
@@ -338,5 +338,12 @@ public class MerchRuleService {
     private String getCurrentUsername() {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         return auth != null ? auth.getName() : "system";
+    }
+    private boolean containsRuleQuery(String query, String ruleQuery) {
+        if (query == null || ruleQuery == null) return false;
+        if (query.equalsIgnoreCase(ruleQuery)) return true;
+        // Check if rule query appears as a whole word within the (stopword-cleaned) query
+        String pattern = "(?i)(^|\\s)" + java.util.regex.Pattern.quote(ruleQuery) + "(\\s|$)";
+        return java.util.regex.Pattern.compile(pattern).matcher(query).find();
     }
 }
