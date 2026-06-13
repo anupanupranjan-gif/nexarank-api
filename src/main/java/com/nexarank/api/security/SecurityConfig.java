@@ -70,6 +70,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/pipeline/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/v1/pipeline/**").hasAnyRole("MERCHANDISER", "APPROVER", "ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/pipeline/**").hasAnyRole("APPROVER", "ADMIN")
+                // LLM config — admin only for write, all authenticated for read
+                .requestMatchers(HttpMethod.GET, "/api/v1/llm-config/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
+                .requestMatchers("/api/v1/llm-config/**").hasRole("ADMIN")
                 .anyRequest().authenticated()   // ← add this line
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
