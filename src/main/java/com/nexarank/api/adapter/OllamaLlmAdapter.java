@@ -75,8 +75,35 @@ public class OllamaLlmAdapter implements LlmPort {
                 return query;
             }
 
-            // Clean up — strip quotes, truncate if runaway
-            rewritten = rewritten.replaceAll("[\"']", "").trim();
+// Take only the first line — small models tend to over-generate
+            if (rewritten.contains("\n")) {
+                rewritten = rewritten.substring(0, rewritten.indexOf("\n")).trim();
+            }
+
+// Strip "original query ->" prefix if model echoed it back
+            if (rewritten.contains("->")) {
+                rewritten = rewritten.substring(rewritten.lastIndexOf("->") + 2).trim();
+            }
+
+// Strip everything up to and including the last colon
+// e.g. "Okay, here's keywords: snow tires ice chains" -> "snow tires ice chains"
+            if (rewritten.contains(":")) {
+                String afterColon = rewritten.substring(rewritten.lastIndexOf(":") + 1).trim();
+                if (!afterColon.isBlank() && afterColon.length() >= 3) {
+                    rewritten = afterColon;
+                }
+            }
+
+// Strip markdown bold markers and quotes
+            rewritten = rewritten.replaceAll("\\*\\*", "").replaceAll("[\"']", "").trim();
+
+// If still nothing useful, fall back to original
+            if (rewritten.isBlank() || rewritten.length() < 3) {
+                log.warn("Ollama rewrite empty after cleanup for query='{}', using original", query);
+                return query;
+            }
+
+// Truncate if still too long
             if (rewritten.length() > 200) rewritten = rewritten.substring(0, 200);
 
             log.info("Ollama rewrite '{}' -> '{}'", query, rewritten);

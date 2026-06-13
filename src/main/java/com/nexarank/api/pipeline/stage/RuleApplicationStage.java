@@ -96,7 +96,7 @@ public class RuleApplicationStage implements PipelineStage {
 
             if (rules.isEmpty()) {
                 log.debug("RULE_APPLICATION: no rules for query='{}', passthrough", query);
-                context.setEnrichedQuery(passthroughResult(query, resolveEngineType(engineType), start));
+                context.setEnrichedQuery(passthroughResult(query, resolveEngineType(context.getEngineType()), start, context));
                 context.addTrace(name(), query, "no rules matched", 
                     System.currentTimeMillis() - start, false);
                 return;
@@ -108,7 +108,7 @@ public class RuleApplicationStage implements PipelineStage {
 
             if (config == null) {
                 log.warn("RULE_APPLICATION: no engine config, agnostic enrichment");
-                result = agnosticEnrichment(query, rules, engineType, start);
+                result = agnosticEnrichment(query, rules, context.getEngineType(), start, context);
             } else {
                 // Allow engineType override from request
                 if (engineType != null) {
@@ -144,16 +144,16 @@ public class RuleApplicationStage implements PipelineStage {
         } catch (Exception e) {
             long took = System.currentTimeMillis() - start;
             log.error("RULE_APPLICATION failed for query='{}': {}", query, e.getMessage(), e);
-            context.setEnrichedQuery(passthroughResult(query, engineType, start));
+            context.setEnrichedQuery(passthroughResult(query, context.getEngineType(), start, context));
             context.addTrace(name(), query, "error: " + e.getMessage(), took, false);
         }
     }
 
     // ── Helpers (copied from RuleEnrichmentService — same logic) ─────────────
 
-    private EnrichedQuery passthroughResult(String query, String engineType, long start) {
+    private EnrichedQuery passthroughResult(String query, String engineType, long start, PipelineContext context) {
         EnrichedQuery r = new EnrichedQuery();
-        r.setOriginalQuery(query);
+        r.setOriginalQuery(context.getOriginalQuery());
         r.setExpandedQuery(query);
         r.setEngineType(engineType != null ? engineType : "UNKNOWN");
         r.setBoosts(List.of());
@@ -164,10 +164,9 @@ public class RuleApplicationStage implements PipelineStage {
         return r;
     }
 
-    private EnrichedQuery agnosticEnrichment(String query, List<MerchRule> rules,
-                                              String engineType, long start) {
+    private EnrichedQuery agnosticEnrichment(String query, List<MerchRule> rules, String engineType, long start, PipelineContext context) {
         EnrichedQuery result = new EnrichedQuery();
-        result.setOriginalQuery(query);
+        result.setOriginalQuery(context.getOriginalQuery());
         result.setExpandedQuery(query);
         result.setEngineType(engineType != null ? engineType : "AGNOSTIC");
 

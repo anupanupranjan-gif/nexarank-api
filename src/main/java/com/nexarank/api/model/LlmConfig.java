@@ -32,7 +32,7 @@ public class LlmConfig {
     private String model;
 
     @Column(name = "timeout_seconds")
-    private int timeoutSeconds = 5;
+    private int timeoutSeconds = 2;
 
     @Column(name = "prompt_template", columnDefinition = "TEXT")
     private String promptTemplate;
@@ -58,13 +58,8 @@ public class LlmConfig {
     public enum ConnectionStatus { UNTESTED, CONNECTED, FAILED }
 
     // ── Default prompt template used if none configured per project ───────────
-    public static final String DEFAULT_PROMPT_TEMPLATE = """
-        You are a search query expander for an eCommerce product search engine.
-        Expand the following search query with related terms and synonyms.
-        Return ONLY the expanded query as a single line. No explanation. No extra text.
-        
-        Query: %s
-        Expanded:""";
+    public static final String DEFAULT_PROMPT_TEMPLATE =
+            "eCommerce search keywords for: %s\nKeywords (5 words max):";
 
     public String getEffectivePromptTemplate() {
         return (promptTemplate != null && !promptTemplate.isBlank())
