@@ -46,6 +46,9 @@ public class SearchEngineConfig {
     @Column(name = "ssl_verify")
     private boolean sslVerify = false;
 
+    @Column(name = "preview_url")
+    private String previewUrl;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "last_status")
     private ConnectionStatus lastStatus = ConnectionStatus.UNTESTED;
@@ -105,4 +108,6 @@ public class SearchEngineConfig {
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+    public String getPreviewUrl() { return previewUrl; }
+    public void setPreviewUrl(String previewUrl) { this.previewUrl = previewUrl; }
 }
