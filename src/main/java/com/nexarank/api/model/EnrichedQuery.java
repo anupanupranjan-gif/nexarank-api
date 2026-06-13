@@ -95,4 +95,18 @@ public class EnrichedQuery {
     public void setAbTestId(String abTestId) { this.abTestId = abTestId; }
     public String getAbVariant() { return abVariant; }
     public void setAbVariant(String abVariant) { this.abVariant = abVariant; }
+    // Personalization — products the client should boost based on session history
+    private List<String> personalizedBoostIds;
+
+    // Diversity hints — client enforces these in result rendering
+    private Integer maxPerBrand;
+    private Integer maxPerCategory;
+
+    public List<String> getPersonalizedBoostIds() { return personalizedBoostIds; }
+    public void setPersonalizedBoostIds(List<String> ids) { this.personalizedBoostIds = ids; }
+    public Integer getMaxPerBrand() { return maxPerBrand; }
+    public void setMaxPerBrand(Integer maxPerBrand) { this.maxPerBrand = maxPerBrand; }
+    public Integer getMaxPerCategory() { return maxPerCategory; }
+    public void setMaxPerCategory(Integer maxPerCategory) { this.maxPerCategory = maxPerCategory; }
+
 }
