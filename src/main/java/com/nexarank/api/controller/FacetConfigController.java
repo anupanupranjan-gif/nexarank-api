@@ -3,6 +3,7 @@ package com.nexarank.api.controller;
 
 import com.nexarank.api.model.FacetConfig;
 import com.nexarank.api.service.FacetConfigService;
+import com.nexarank.api.service.FacetVisibilityService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -18,20 +19,43 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/facets")
 public class FacetConfigController {
 
     private final FacetConfigService service;
+    private final FacetVisibilityService facetVisibilityService;
 
-    public FacetConfigController(FacetConfigService service) {
+    public FacetConfigController(FacetConfigService service,
+                                   FacetVisibilityService facetVisibilityService) {
         this.service = service;
+        this.facetVisibilityService = facetVisibilityService;
     }
 
     @GetMapping
-    public List<FacetConfig> getFacets(@RequestParam(defaultValue = "false") boolean enabledOnly) {
-        return enabledOnly ? service.getEnabledFacets() : service.getAllFacets();
+    public List<FacetConfig> getFacets(
+            @RequestParam(defaultValue = "false") boolean enabledOnly,
+            @RequestParam java.util.Map<String, String> allParams) {
+
+        List<FacetConfig> facets = enabledOnly
+                ? service.getEnabledFacets()
+                : service.getAllFacets();
+
+        // Extract facet_ prefixed params as selectedFacets context
+        java.util.Map<String, String> selectedFacets = allParams.entrySet().stream()
+                .filter(e -> e.getKey().startsWith("facet_"))
+                .collect(Collectors.toMap(
+                        e -> e.getKey().substring(6),
+                        java.util.Map.Entry::getValue));
+
+        if (!selectedFacets.isEmpty()) {
+            facets = facetVisibilityService.applyVisibilityRules(
+                    service.getAllFacets(), selectedFacets);
+        }
+
+        return facets;
     }
 
     @GetMapping("/{id}")
