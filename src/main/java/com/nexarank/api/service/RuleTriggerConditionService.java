@@ -95,14 +95,48 @@ public class RuleTriggerConditionService {
 
         for (RuleTriggerCondition condition : conditions) {
             String selectedValue = selectedFacets.get(condition.getFacetField());
-            if (selectedValue == null) return false; // AND — all must match
+            if (selectedValue == null) return false;
 
             List<String> allowedValues = condition.getFacetValues();
-            boolean anyMatch = allowedValues != null && allowedValues.stream()
-                    .anyMatch(v -> v.equalsIgnoreCase(selectedValue));
-            if (!anyMatch) return false;
+            if (allowedValues == null || allowedValues.isEmpty()) return false;
+
+            // Detect condition type from stored values
+            boolean isRange = allowedValues.stream()
+                    .anyMatch(v -> v.startsWith("min:") || v.startsWith("max:"));
+            boolean isBoolean = allowedValues.stream()
+                    .allMatch(v -> v.equalsIgnoreCase("true") || v.equalsIgnoreCase("false"));
+
+            boolean matches;
+            if (isRange) {
+                matches = matchesRange(selectedValue, allowedValues);
+            } else if (isBoolean) {
+                matches = allowedValues.stream()
+                        .anyMatch(v -> v.equalsIgnoreCase(selectedValue));
+            } else {
+                // TERMS — existing OR logic
+                matches = allowedValues.stream()
+                        .anyMatch(v -> v.equalsIgnoreCase(selectedValue));
+            }
+
+            if (!matches) return false;
         }
         return true;
+    }
+
+    private boolean matchesRange(String selectedValue, List<String> allowedValues) {
+        try {
+            double val = Double.parseDouble(selectedValue);
+            Double min = null, max = null;
+            for (String v : allowedValues) {
+                if (v.startsWith("min:")) min = Double.parseDouble(v.substring(4));
+                if (v.startsWith("max:")) max = Double.parseDouble(v.substring(4));
+            }
+            if (min != null && val < min) return false;
+            if (max != null && val > max) return false;
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
