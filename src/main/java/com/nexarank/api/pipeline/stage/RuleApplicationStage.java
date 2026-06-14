@@ -121,6 +121,7 @@ public class RuleApplicationStage implements PipelineStage {
                 }
                 SearchEnginePort adapter = adapterFactory.getAdapter(config);
                 result = adapter.translateRules(query, rules, config);
+                result.setOriginalQuery(context.getOriginalQuery());
             }
 
             result.setProcessingMs(System.currentTimeMillis() - start);
