@@ -33,7 +33,9 @@ public class QueryClassificationStage implements PipelineStage {
 
     // Part number / SKU patterns — strong navigational signal
     private static final java.util.regex.Pattern PART_NUMBER_PATTERN =
-        java.util.regex.Pattern.compile(".*[A-Z]{1,4}[-]?\\d{3,}.*", java.util.regex.Pattern.CASE_INSENSITIVE);
+            java.util.regex.Pattern.compile(
+                    ".*([A-Z]{2,}[-][A-Z0-9]{2,}[-][A-Z0-9]+|[A-Z]{1,4}\\d{3,}[A-Z0-9]*).*",
+                    java.util.regex.Pattern.CASE_INSENSITIVE);
 
     // Commercial intent keywords
     private static final Set<String> TRANSACTIONAL_SIGNALS = Set.of(
@@ -54,6 +56,7 @@ public class QueryClassificationStage implements PipelineStage {
 
     @Override
     public void execute(PipelineContext context) {
+        context.setPreRewriteQuery(context.getCurrentQuery());
         long start = System.currentTimeMillis();
         String query = context.getCurrentQuery();
 

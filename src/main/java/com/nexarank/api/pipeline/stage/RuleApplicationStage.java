@@ -54,7 +54,9 @@ public class RuleApplicationStage implements PipelineStage {
     @Override
     public void execute(PipelineContext context) {
         long start = System.currentTimeMillis();
-        String query = context.getCurrentQuery();
+        // Rules match on the spell-corrected, stopword-cleaned query
+        // NOT the LLM rewrite — LLM expansion is for the search engine only
+        String query = context.getPreRewriteQuery();
         String engineType = context.getEngineType() != null
                 ? context.getEngineType()
                 : configService.getConfig()

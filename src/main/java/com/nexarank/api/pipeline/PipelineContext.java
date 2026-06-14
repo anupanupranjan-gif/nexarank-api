@@ -130,4 +130,8 @@ public class PipelineContext {
     public Map<String, Object> getMetadata()             { return metadata; }
     public void putMetadata(String key, Object val)      { metadata.put(key, val); }
     public Object getMetadata(String key)                { return metadata.get(key); }
+    private String preRewriteQuery;
+
+    public String getPreRewriteQuery() { return preRewriteQuery != null ? preRewriteQuery : currentQuery; }
+    public void setPreRewriteQuery(String q) { this.preRewriteQuery = q; }
 }
