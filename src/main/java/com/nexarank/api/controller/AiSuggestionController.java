@@ -31,4 +31,9 @@ public class AiSuggestionController {
     public ResponseEntity<?> applySuggestion(@RequestBody Map<String, Object> suggestion) {
         return ResponseEntity.ok(suggestionService.createSuggestedRule(suggestion));
     }
+
+    @GetMapping("/alerts")
+    public ResponseEntity<?> getAlerts() {
+        return ResponseEntity.ok(suggestionService.getWatchedQueryAlerts());
+    }
 }

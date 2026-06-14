@@ -6,6 +6,7 @@ import com.nexarank.api.adapter.LlmAdapterFactory;
 import com.nexarank.api.model.LlmConfig;
 import com.nexarank.api.model.MerchRule;
 import com.nexarank.api.model.SuggestionConfig;
+import com.nexarank.api.model.WatchedQuery;
 import com.nexarank.api.repository.ClickEventRepository;
 import com.nexarank.api.repository.MerchRuleRepository;
 import com.nexarank.api.repository.ZeroResultQueryRepository;
@@ -35,19 +36,22 @@ public class AiRuleSuggestionService {
     private final LlmConfigService llmConfigService;
     private final LlmAdapterFactory llmAdapterFactory;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final WatchedQueryService watchedQueryService;
 
     public AiRuleSuggestionService(ClickEventRepository clickEventRepository,
-                                    ZeroResultQueryRepository zeroResultRepository,
-                                    MerchRuleRepository merchRuleRepository,
-                                    SuggestionConfigService suggestionConfigService,
-                                    LlmConfigService llmConfigService,
-                                    LlmAdapterFactory llmAdapterFactory) {
+                                   ZeroResultQueryRepository zeroResultRepository,
+                                   MerchRuleRepository merchRuleRepository,
+                                   SuggestionConfigService suggestionConfigService,
+                                   LlmConfigService llmConfigService,
+                                   LlmAdapterFactory llmAdapterFactory, WatchedQueryService watchedQueryService) {
         this.clickEventRepository   = clickEventRepository;
         this.zeroResultRepository   = zeroResultRepository;
         this.merchRuleRepository    = merchRuleRepository;
         this.suggestionConfigService = suggestionConfigService;
         this.llmConfigService       = llmConfigService;
         this.llmAdapterFactory      = llmAdapterFactory;
+
+        this.watchedQueryService = watchedQueryService;
     }
 
     /**
@@ -209,5 +213,66 @@ public class AiRuleSuggestionService {
 
     private String fallbackSynonym(String query) {
         return query + " alternative, " + query + " replacement";
+    }
+    /**
+     * Check watched queries against actual performance and return alerts.
+     */
+    public List<Map<String, Object>> getWatchedQueryAlerts() {
+        String tenantId  = TenantContext.getTenantId();
+        String projectId = TenantContext.getProjectId();
+        SuggestionConfig config = suggestionConfigService.getConfig();
+        Instant since = Instant.now().minus(config.getLookbackDays(), ChronoUnit.DAYS);
+
+        List<WatchedQuery> watched = watchedQueryService.getEnabled();
+        if (watched.isEmpty()) return List.of();
+
+        List<Object[]> queryStats = clickEventRepository.findQueryStats(tenantId, projectId, since);
+
+        // Build a map of query -> stats for fast lookup
+        Map<String, Object[]> statsMap = new java.util.HashMap<>();
+        for (Object[] row : queryStats) {
+            statsMap.put(((String) row[0]).toLowerCase(), row);
+        }
+
+        List<Map<String, Object>> alerts = new java.util.ArrayList<>();
+        for (WatchedQuery wq : watched) {
+            Object[] stats = statsMap.get(wq.getQuery().toLowerCase());
+            Map<String, Object> alert = new java.util.LinkedHashMap<>();
+            alert.put("query", wq.getQuery());
+            alert.put("notes", wq.getNotes());
+            alert.put("watchedQueryId", wq.getId());
+
+            if (stats == null) {
+                alert.put("status", "NO_DATA");
+                alert.put("message", "No click data found for this query in the last "
+                        + config.getLookbackDays() + " days");
+                alerts.add(alert);
+                continue;
+            }
+
+            long clicks      = ((Number) stats[1]).longValue();
+            long impressions = ((Number) stats[2]).longValue();
+            double ctr       = impressions > 0 ? (double) clicks / impressions : 0.0;
+
+            alert.put("clicks", clicks);
+            alert.put("impressions", impressions);
+            alert.put("ctr", Math.round(ctr * 1000.0) / 1000.0);
+
+            List<String> breaches = new java.util.ArrayList<>();
+            if (wq.getExpectedMinCtr() != null && ctr < wq.getExpectedMinCtr()) {
+                breaches.add(String.format("CTR %.1f%% is below expected %.1f%%",
+                        ctr * 100, wq.getExpectedMinCtr() * 100));
+            }
+
+            if (breaches.isEmpty()) {
+                alert.put("status", "OK");
+                alert.put("message", "Performance within expected thresholds");
+            } else {
+                alert.put("status", "BREACH");
+                alert.put("message", String.join("; ", breaches));
+            }
+            alerts.add(alert);
+        }
+        return alerts;
     }
 }

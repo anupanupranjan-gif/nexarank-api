@@ -77,6 +77,10 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/llm-config/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/v1/suggestions/config").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/v1/suggestions/config").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/suggestions/watched-queries").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/suggestions/watched-queries").hasAnyRole("MERCHANDISER", "APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/suggestions/watched-queries/**").hasAnyRole("APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.PATCH, "/api/v1/suggestions/watched-queries/**").hasAnyRole("MERCHANDISER", "APPROVER", "ADMIN")
                 .anyRequest().authenticated()   // ← add this line
 
             )
