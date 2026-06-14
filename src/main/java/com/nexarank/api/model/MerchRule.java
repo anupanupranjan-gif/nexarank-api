@@ -41,6 +41,10 @@ public class MerchRule {
     private String synonymsJson;
 
     @Enumerated(EnumType.STRING)
+    @Column(name = "synonym_direction")
+    private SynonymDirection synonymDirection = SynonymDirection.TWO_WAY;
+
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private RuleStatus status = RuleStatus.DRAFT;
 
@@ -84,6 +88,7 @@ public class MerchRule {
     public enum RuleType { BOOST, PIN, BURY, SYNONYM }
 
     public enum RuleStatus { DRAFT, PENDING_REVIEW, APPROVED, REJECTED, DISABLED }
+    public enum SynonymDirection { TWO_WAY, ONE_WAY }
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -105,6 +110,8 @@ public class MerchRule {
     public void setPinnedIdsJson(String pinnedIdsJson) { this.pinnedIdsJson = pinnedIdsJson; }
     public String getSynonymsJson() { return synonymsJson; }
     public void setSynonymsJson(String synonymsJson) { this.synonymsJson = synonymsJson; }
+    public SynonymDirection getSynonymDirection() { return synonymDirection; }
+    public void setSynonymDirection(SynonymDirection synonymDirection) { this.synonymDirection = synonymDirection; }
     public RuleStatus getStatus() { return status; }
     public void setStatus(RuleStatus status) { this.status = status; }
     public int getPriority() { return priority; }

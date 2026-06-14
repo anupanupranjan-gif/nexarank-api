@@ -167,10 +167,19 @@ public class SolrAdapter implements SearchEnginePort {
                 }
                 case SYNONYM -> {
                     if (rule.getSynonyms() != null) {
-                        String expanded = query + " " + String.join(" ", rule.getSynonyms());
-                        result.setExpandedQuery(expanded);
+                        boolean oneWay = rule.getSynonymDirection() ==
+                                MerchRule.SynonymDirection.ONE_WAY;
+                        if (oneWay) {
+                            result.setExpandedQuery(String.join(" ", rule.getSynonyms()));
+                            log.debug("Solr SYNONYM ONE_WAY '{}' -> '{}'",
+                                    query, result.getExpandedQuery());
+                        } else {
+                            result.setExpandedQuery(query + " " +
+                                    String.join(" ", rule.getSynonyms()));
+                            log.debug("Solr SYNONYM TWO_WAY '{}' -> '{}'",
+                                    query, result.getExpandedQuery());
+                        }
                         appliedRules.add(rule.getId());
-                        log.debug("Solr SYNONYM expanded '{}' -> '{}'", query, expanded);
                     }
                 }
             }

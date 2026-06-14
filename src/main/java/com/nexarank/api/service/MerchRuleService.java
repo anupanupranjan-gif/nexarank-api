@@ -279,7 +279,8 @@ public class MerchRuleService {
         String projectId = TenantContext.getProjectId();
         boolean isWildcard = query == null || query.isBlank() || query.equals("*");
 
-        return repository.findByTenantIdAndProjectId(tenantId, projectId).stream()
+        List<MerchRule> allRules = repository.findByTenantIdAndProjectId(tenantId, projectId);
+        List<MerchRule> result = allRules.stream()
                 .filter(r -> r.getStatus() == MerchRule.RuleStatus.APPROVED && r.isEnabled())
                 .filter(r -> r.getActivateAt() == null || r.getActivateAt().isBefore(now))
                 .filter(r -> r.getExpireAt() == null || r.getExpireAt().isAfter(now))
@@ -287,11 +288,14 @@ public class MerchRuleService {
                     boolean queryMatches = !r.isRequireQuery()
                             || isWildcard
                             || (query != null && containsRuleQuery(query, r.getQuery()));
-                    if (!queryMatches) return false;
-                    return triggerService.conditionsMatch(r.getId(),
+                    boolean condMatch = triggerService.conditionsMatch(r.getId(),
                             selectedFacets != null ? selectedFacets : java.util.Map.of());
+                    if (!queryMatches) return false;
+                    return condMatch;
                 })
                 .toList();
+        result.forEach(this::deserializeTransientFields);
+        return result;
     }
 
         /**

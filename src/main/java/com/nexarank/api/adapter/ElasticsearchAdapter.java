@@ -166,10 +166,22 @@ public class ElasticsearchAdapter implements SearchEnginePort {
                 }
                 case SYNONYM -> {
                     if (rule.getSynonyms() != null) {
-                        String expanded = query + " " + String.join(" ", rule.getSynonyms());
-                        result.setExpandedQuery(expanded);
+                        boolean oneWay = rule.getSynonymDirection() ==
+                                MerchRule.SynonymDirection.ONE_WAY;
+                        if (oneWay) {
+                            // ONE_WAY: replace query with synonym terms only
+                            // "car battery" → "battery" means search runs on "battery"
+                            result.setExpandedQuery(String.join(" ", rule.getSynonyms()));
+                            log.debug("ES SYNONYM ONE_WAY '{}' -> '{}'",
+                                    query, result.getExpandedQuery());
+                        } else {
+                            // TWO_WAY: append synonyms to original query (existing behavior)
+                            result.setExpandedQuery(query + " " +
+                                    String.join(" ", rule.getSynonyms()));
+                            log.debug("ES SYNONYM TWO_WAY '{}' -> '{}'",
+                                    query, result.getExpandedQuery());
+                        }
                         appliedRules.add(rule.getId());
-                        log.debug("ES SYNONYM expanded '{}' -> '{}'", query, expanded);
                     }
                 }
             }
