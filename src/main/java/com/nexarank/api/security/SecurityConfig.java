@@ -84,6 +84,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/signals/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/v1/signals/**").hasAnyRole("MERCHANDISER", "APPROVER", "ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/signals/**").hasAnyRole("APPROVER", "ADMIN")
+                .requestMatchers("/api/v1/reports/**").hasRole("ADMIN")
                 .anyRequest().authenticated()   // ← add this line
 
             )

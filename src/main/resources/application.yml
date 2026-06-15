@@ -19,6 +19,22 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
 
+  mail:
+    mail:
+      host: smtp.gmail.com
+      port: 587
+      username: modernreliability@gmail.com
+      password: ${MAIL_PASSWORD:}
+      properties:
+        mail:
+          smtp:
+            auth: true
+            starttls:
+              enable: true
+            connectiontimeout: 5000
+            timeout: 5000
+            writetimeout: 5000
+
 server:
   port: 8080
 
@@ -27,6 +43,9 @@ management:
     web:
       exposure:
         include: health,info,metrics
+  health:
+    mail:
+      enabled: false
 
 logging:
   level:
@@ -39,6 +58,10 @@ nexarank:
   search-api:
     base-url: http://search-api.default.svc.cluster.local/api/v1
     api-key: searchx-dev-key-2026
+  report:
+    recipients: modernreliability@gmail.com
+    from: modernreliability@gmail.com
+    cron: "0 0 8 * * MON"
 
 ollama:
   base-url: ${OLLAMA_BASE_URL:http://localhost:11434}

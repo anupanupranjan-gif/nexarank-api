@@ -66,4 +66,8 @@ public class WatchedQueryService {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         return auth != null ? auth.getName() : "system";
     }
+
+    public List<WatchedQuery> getAllForTenant(String tenantId, String projectId) {
+        return repository.findByTenantIdAndProjectId(tenantId, projectId);
+    }
 }

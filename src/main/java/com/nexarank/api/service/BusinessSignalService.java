@@ -137,4 +137,7 @@ public class BusinessSignalService {
     public void delete(String id) {
         repository.deleteById(id);
     }
+    public List<BusinessSignal> getActiveSignalsForTenant(String tenantId, String projectId) {
+        return repository.findActiveSignals(tenantId, projectId, Instant.now());
+    }
 }
