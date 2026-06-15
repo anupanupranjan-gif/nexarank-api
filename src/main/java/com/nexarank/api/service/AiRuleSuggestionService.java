@@ -3,10 +3,7 @@ package com.nexarank.api.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexarank.api.adapter.LlmAdapterFactory;
-import com.nexarank.api.model.LlmConfig;
-import com.nexarank.api.model.MerchRule;
-import com.nexarank.api.model.SuggestionConfig;
-import com.nexarank.api.model.WatchedQuery;
+import com.nexarank.api.model.*;
 import com.nexarank.api.repository.ClickEventRepository;
 import com.nexarank.api.repository.MerchRuleRepository;
 import com.nexarank.api.repository.ZeroResultQueryRepository;
@@ -37,13 +34,14 @@ public class AiRuleSuggestionService {
     private final LlmAdapterFactory llmAdapterFactory;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final WatchedQueryService watchedQueryService;
+    private final BusinessSignalService businessSignalService;
 
     public AiRuleSuggestionService(ClickEventRepository clickEventRepository,
                                    ZeroResultQueryRepository zeroResultRepository,
                                    MerchRuleRepository merchRuleRepository,
                                    SuggestionConfigService suggestionConfigService,
                                    LlmConfigService llmConfigService,
-                                   LlmAdapterFactory llmAdapterFactory, WatchedQueryService watchedQueryService) {
+                                   LlmAdapterFactory llmAdapterFactory, WatchedQueryService watchedQueryService, BusinessSignalService businessSignalService) {
         this.clickEventRepository   = clickEventRepository;
         this.zeroResultRepository   = zeroResultRepository;
         this.merchRuleRepository    = merchRuleRepository;
@@ -52,6 +50,7 @@ public class AiRuleSuggestionService {
         this.llmAdapterFactory      = llmAdapterFactory;
 
         this.watchedQueryService = watchedQueryService;
+        this.businessSignalService = businessSignalService;
     }
 
     /**
@@ -76,12 +75,15 @@ public class AiRuleSuggestionService {
 
         List<Map<String, Object>> suggestions = new ArrayList<>();
 
+        Map<String, List<BusinessSignal>> signalsByProduct =
+                businessSignalService.getActiveSignalsByProduct();
+
         productStats.stream()
                 .filter(row -> {
                     double avgPos = ((Number) row[3]).doubleValue();
                     long clicks   = ((Number) row[4]).longValue();
                     return avgPos >= config.getMaxClickPosition()
-                        && clicks >= config.getMinClicks();
+                            && clicks >= config.getMinClicks();
                 })
                 .limit(config.getMaxSuggestions())
                 .forEach(row -> {
@@ -102,6 +104,16 @@ public class AiRuleSuggestionService {
                         "'%s' was clicked %d time(s) at avg position %.1f — boost it higher",
                         productTitle, clicks, avgPos));
                     suggestion.put("alreadyHasRule", existingRuleQueries.contains(query));
+                    // Factor in business signals
+                    List<BusinessSignal> signals = signalsByProduct.getOrDefault(productId, List.of());
+                    List<String> signalReasons = signals.stream().map(this::signalReason).toList();
+                    if (!signalReasons.isEmpty()) {
+                        suggestion.put("businessSignals", signalReasons);
+                        suggestion.put("signalDrivenType", signals.stream()
+                            .anyMatch(s -> s.getSignalType() == BusinessSignal.SignalType.PROMOTED ||
+                                          s.getSignalType() == BusinessSignal.SignalType.SEASONAL)
+                            ? "BOOST" : "BURY");
+                    }
                     suggestions.add(suggestion);
                 });
 
@@ -188,7 +200,17 @@ public class AiRuleSuggestionService {
      *
      * Uses HttpURLConnection (not HttpClient) for Java 25 AArch64 compatibility.
      */
-    private String askLlmForSynonyms(String query) {
+
+    private String signalReason(com.nexarank.api.model.BusinessSignal sig) {
+        return switch (sig.getSignalType()) {
+            case PROMOTED     -> "Promoted product — priority boost";
+            case OUT_OF_STOCK -> "Out of stock — consider burying";
+            case MARGIN_LOW   -> "Low margin — consider burying";
+            case SEASONAL     -> "Seasonal signal — " + sig.getValue();
+        };
+    }
+
+        private String askLlmForSynonyms(String query) {
         LlmConfig llmConfig = llmConfigService.getConfig().orElse(null);
 
         if (llmConfig == null) {
@@ -275,4 +297,41 @@ public class AiRuleSuggestionService {
         }
         return alerts;
     }
+        /**
+         * Suggest rules purely from business signals — no click data needed.
+         */
+        public List<Map<String, Object>> suggestSignalDrivenRules() {
+            Map<String, List<BusinessSignal>> signalsByProduct =
+                    businessSignalService.getActiveSignalsByProduct();
+
+            List<Map<String, Object>> suggestions = new ArrayList<>();
+            for (Map.Entry<String, List<BusinessSignal>> entry : signalsByProduct.entrySet()) {
+                String productId = entry.getKey();
+                for (BusinessSignal signal : entry.getValue()) {
+                    Map<String, Object> suggestion = new LinkedHashMap<>();
+                    suggestion.put("productId", productId);
+                    suggestion.put("signalType", signal.getSignalType().name());
+                    suggestion.put("value", signal.getValue());
+                    suggestion.put("source", signal.getSource());
+                    switch (signal.getSignalType()) {
+                        case PROMOTED, SEASONAL -> {
+                            suggestion.put("type", "BOOST");
+                            suggestion.put("reason", signal.getSignalType() == BusinessSignal.SignalType.PROMOTED
+                                    ? "Brand agreement — promote this product"
+                                    : "Seasonal signal — " + signal.getValue());
+                        }
+                        case OUT_OF_STOCK -> {
+                            suggestion.put("type", "BURY");
+                            suggestion.put("reason", "Out of stock — hide from results");
+                        }
+                        case MARGIN_LOW -> {
+                            suggestion.put("type", "BURY");
+                            suggestion.put("reason", "Low margin — deprioritize: " + signal.getValue());
+                        }
+                    }
+                    suggestions.add(suggestion);
+                }
+            }
+            return suggestions;
+        }
 }

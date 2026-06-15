@@ -81,6 +81,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/v1/suggestions/watched-queries").hasAnyRole("MERCHANDISER", "APPROVER", "ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/suggestions/watched-queries/**").hasAnyRole("APPROVER", "ADMIN")
                 .requestMatchers(HttpMethod.PATCH, "/api/v1/suggestions/watched-queries/**").hasAnyRole("MERCHANDISER", "APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/v1/signals/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/signals/**").hasAnyRole("MERCHANDISER", "APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/signals/**").hasAnyRole("APPROVER", "ADMIN")
                 .anyRequest().authenticated()   // ← add this line
 
             )

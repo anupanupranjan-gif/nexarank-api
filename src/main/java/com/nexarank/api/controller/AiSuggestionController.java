@@ -36,4 +36,9 @@ public class AiSuggestionController {
     public ResponseEntity<?> getAlerts() {
         return ResponseEntity.ok(suggestionService.getWatchedQueryAlerts());
     }
+
+    @GetMapping("/signals")
+    public ResponseEntity<?> getSignalSuggestions() {
+        return ResponseEntity.ok(suggestionService.suggestSignalDrivenRules());
+    }
 }
