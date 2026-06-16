@@ -83,22 +83,26 @@ public class AuthController {
         String username = body.get("username");
         String password = body.get("password");
         String roleStr = body.get("role");
+        String email = body.get("email");
+        String displayName = body.get("displayName");
 
         User.Role role;
         try {
-            role = User.Role.valueOf(roleStr.toUpperCase());
+            role = User.Role.valueOf(roleStr != null ? roleStr.toUpperCase() : "VIEWER");
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", "Invalid role. Must be one of: VIEWER, MERCHANDISER, APPROVER, ADMIN"));
+                    .body(Map.of("error", "Invalid role. Must be one of: STAKEHOLDER, VIEWER, MERCHANDISER, APPROVER, ADMIN"));
         }
 
         try {
-            User user = userService.createUser(username, password, role);
+            User user = userService.createUser(username, password, role, email, displayName);
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(Map.of(
                             "id", user.getId(),
                             "username", user.getUsername(),
-                            "role", user.getRole().name()
+                            "role", user.getRole().name(),
+                            "email", user.getEmail() != null ? user.getEmail() : "",
+                            "displayName", user.getDisplayName() != null ? user.getDisplayName() : ""
                     ));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

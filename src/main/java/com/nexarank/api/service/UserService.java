@@ -47,7 +47,7 @@ public class UserService {
         membershipRepository.deleteByUserIdAndGroupId(userId, groupId);
     }
 
-    public User createUser(String username, String rawPassword, User.Role role) {
+    public User createUser(String username, String rawPassword, User.Role role, String email, String displayName) {
         if (userRepository.existsByUsername(username)) {
             throw new IllegalArgumentException("Username already exists: " + username);
         }
@@ -57,6 +57,8 @@ public class UserService {
         user.setUsername(username);
         user.setPassword(passwordEncoder.encode(rawPassword));
         user.setRole(role);
+        user.setEmail(email);
+        user.setDisplayName(displayName);
         user.setEnabled(true);
         return userRepository.save(user);
     }

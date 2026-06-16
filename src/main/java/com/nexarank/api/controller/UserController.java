@@ -64,7 +64,7 @@ public class UserController {
         }
 
         try {
-            User user = userService.createUser(username, password, role);
+            User user = userService.createUser(username, password, role, body.get("email"), body.get("displayName"));
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(Map.of(
                             "id", user.getId(),
