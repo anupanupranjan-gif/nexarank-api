@@ -26,6 +26,9 @@ public class Tenant {
     @Column(name = "created_at")
     private Instant createdAt = Instant.now();
 
+    @Column(name = "auto_publish_rules", nullable = false)
+    private boolean autoPublishRules = true;
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getDisplayName() { return displayName; }
@@ -38,4 +41,6 @@ public class Tenant {
     public void setBrandColor(String brandColor) { this.brandColor = brandColor; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+    public boolean isAutoPublishRules() { return autoPublishRules; }
+    public void setAutoPublishRules(boolean autoPublishRules) { this.autoPublishRules = autoPublishRules; }
 }

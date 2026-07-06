@@ -27,10 +27,22 @@ public class AuditService {
     }
 
     public void log(String action, String entity, String entityId, String details) {
-        try {
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            String username = auth != null ? auth.getName() : "system";
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String username = auth != null ? auth.getName() : "system";
+        save(action, entity, entityId, details, username);
+    }
 
+    /**
+     * NR-68: for transitions the system performs on its own (e.g. tenant
+     * auto-publish cascading APPROVED -> LIVE), regardless of which human
+     * triggered the surrounding request.
+     */
+    public void logAsSystem(String action, String entity, String entityId, String details) {
+        save(action, entity, entityId, details, "system");
+    }
+
+    private void save(String action, String entity, String entityId, String details, String username) {
+        try {
             AuditEvent event = new AuditEvent();
             event.setId(UUID.randomUUID().toString());
             event.setTenantId(TenantContext.getTenantId());

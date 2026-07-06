@@ -49,7 +49,7 @@ public class AnalyticsController {
 
         // Active rules count
         long activeRules = merchRuleRepository.findByTenantIdAndProjectId(tenantId, projectId)
-                .stream().filter(r -> r.getStatus().name().equals("APPROVED") && r.isEnabled()).count();
+                .stream().filter(r -> r.getStatus().name().equals("LIVE") && r.isEnabled()).count();
 
         long pendingRules = merchRuleRepository.findByTenantIdAndProjectId(tenantId, projectId)
                 .stream().filter(r -> r.getStatus().name().equals("PENDING_REVIEW")).count();

@@ -130,9 +130,9 @@ public class EmailReportService {
 
         // Gather data
         List<MerchRule> allRules = ruleRepository.findByTenantIdAndProjectId(tenantId, projectId);
-        long activeRules  = allRules.stream().filter(r -> r.getStatus() == MerchRule.RuleStatus.APPROVED && r.isEnabled()).count();
+        long activeRules  = allRules.stream().filter(r -> r.getStatus() == MerchRule.RuleStatus.LIVE && r.isEnabled()).count();
         long pendingRules = allRules.stream().filter(r -> r.getStatus() == MerchRule.RuleStatus.PENDING_REVIEW).count();
-        long neverFired   = allRules.stream().filter(r -> r.getStatus() == MerchRule.RuleStatus.APPROVED
+        long neverFired   = allRules.stream().filter(r -> r.getStatus() == MerchRule.RuleStatus.LIVE
             && r.isEnabled() && r.getCreatedAt().isBefore(since)).count();
 
         long totalClicks      = clickEventRepository.countByTenantIdAndProjectId(tenantId, projectId);

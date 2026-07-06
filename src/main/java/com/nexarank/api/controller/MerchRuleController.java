@@ -57,6 +57,22 @@ public class MerchRuleController {
                         .body(ErrorResponse.of("RULE_NOT_FOUND", "Rule not found: " + id)));
     }
 
+    @PatchMapping("/{id}/submit")
+    public ResponseEntity<?> submitForReview(@PathVariable String id) {
+        return service.submitForReview(id)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ErrorResponse.of("RULE_NOT_FOUND", "Rule not found: " + id)));
+    }
+
+    @PatchMapping("/{id}/promote")
+    public ResponseEntity<?> promoteToLive(@PathVariable String id) {
+        return service.promoteToLive(id)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ErrorResponse.of("RULE_NOT_FOUND", "Rule not found: " + id)));
+    }
+
     @PatchMapping("/{id}/toggle")
     public ResponseEntity<?> toggleRule(@PathVariable String id) {
         return service.toggleRule(id)
@@ -67,9 +83,20 @@ public class MerchRuleController {
 
     @PatchMapping("/{id}/approve")
     public ResponseEntity<?> approveRule(@PathVariable String id,
-                                          @RequestBody(required = false) Map<String, String> body) {
-        String comment = body != null ? body.getOrDefault("comment", "") : "";
-        return service.approveRule(id, comment)
+                                          @RequestBody(required = false) Map<String, Object> body) {
+        String comment = body != null && body.get("comment") != null ? body.get("comment").toString() : "";
+        boolean publishNow = body != null && Boolean.TRUE.equals(body.get("publish"));
+        return service.approveRule(id, comment, publishNow)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ErrorResponse.of("RULE_NOT_FOUND", "Rule not found: " + id)));
+    }
+
+    @PatchMapping("/{id}/demote")
+    public ResponseEntity<?> demoteFromLive(@PathVariable String id,
+                                             @RequestBody(required = false) Map<String, String> body) {
+        String targetStatus = body != null ? body.get("targetStatus") : null;
+        return service.demoteFromLive(id, targetStatus)
                 .<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(ErrorResponse.of("RULE_NOT_FOUND", "Rule not found: " + id)));

@@ -44,7 +44,12 @@ public class SecurityConfig {
                 // create and edit — merchandiser and above
                 .requestMatchers(HttpMethod.POST, "/api/v1/rules/**").hasAnyRole("MERCHANDISER", "APPROVER", "ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/v1/rules/**").hasAnyRole("MERCHANDISER", "APPROVER", "ADMIN")
-                // toggle and delete — approver and above
+                // submit for review — creator (merchandiser and above)
+                .requestMatchers(HttpMethod.PATCH, "/api/v1/rules/*/submit").hasAnyRole("MERCHANDISER", "APPROVER", "ADMIN")
+                // manual publish/revert of live rules — admin and tenant admin only
+                .requestMatchers(HttpMethod.PATCH, "/api/v1/rules/*/promote").hasAnyRole("ADMIN", "TENANT_ADMIN")
+                .requestMatchers(HttpMethod.PATCH, "/api/v1/rules/*/demote").hasAnyRole("ADMIN", "TENANT_ADMIN")
+                // toggle, approve, reject, and delete — approver and above
                 .requestMatchers(HttpMethod.PATCH, "/api/v1/rules/**").hasAnyRole("APPROVER", "ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/rules/**").hasAnyRole("APPROVER", "ADMIN")
                 // tenant and project management — admin only

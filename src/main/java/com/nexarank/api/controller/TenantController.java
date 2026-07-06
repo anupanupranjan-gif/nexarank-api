@@ -107,6 +107,7 @@ public class TenantController {
         return tenantRepository.findById(id).map(tenant -> {
             if (body.containsKey("displayName")) tenant.setDisplayName(body.get("displayName"));
             if (body.containsKey("enabled")) tenant.setEnabled(Boolean.parseBoolean(body.get("enabled")));
+            if (body.containsKey("autoPublishRules")) tenant.setAutoPublishRules(Boolean.parseBoolean(body.get("autoPublishRules")));
             return ResponseEntity.ok(tenantRepository.save(tenant));
         }).orElse(ResponseEntity.notFound().build());
     }

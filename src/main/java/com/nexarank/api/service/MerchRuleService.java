@@ -8,7 +8,9 @@ import java.util.stream.Collectors;
 import java.util.UUID;
 
 import com.nexarank.api.model.MerchRule;
+import com.nexarank.api.model.Tenant;
 import com.nexarank.api.repository.MerchRuleRepository;
+import com.nexarank.api.repository.TenantRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -26,13 +28,22 @@ public class MerchRuleService {
     private final MerchRuleRepository repository;
     private final RuleVersionService versionService;
     private final RuleTriggerConditionService triggerService;
+    private final RuleNotificationService notificationService;
+    private final TenantRepository tenantRepository;
+    private final AuditService auditService;
 
     public MerchRuleService(MerchRuleRepository repository,
                              RuleVersionService versionService,
-                             RuleTriggerConditionService triggerService) {
+                             RuleTriggerConditionService triggerService,
+                             RuleNotificationService notificationService,
+                             TenantRepository tenantRepository,
+                             AuditService auditService) {
         this.repository     = repository;
         this.versionService = versionService;
         this.triggerService = triggerService;
+        this.notificationService = notificationService;
+        this.tenantRepository = tenantRepository;
+        this.auditService = auditService;
     }
 
     public List<MerchRule> getAllRules() {
@@ -51,17 +62,21 @@ public class MerchRuleService {
                 .toList();
     }
 
-    public List<MerchRule> getApprovedRules() {
+    /**
+     * NR-68: rules that are actually serving live search traffic.
+     * APPROVED alone is not enough — an ADMIN must separately promote to LIVE.
+     */
+    public List<MerchRule> getLiveRules() {
         Instant now = Instant.now();
         return getAllRules().stream()
-                .filter(r -> r.getStatus() == MerchRule.RuleStatus.APPROVED && r.isEnabled())
+                .filter(r -> r.getStatus() == MerchRule.RuleStatus.LIVE && r.isEnabled())
                 .filter(r -> r.getActivateAt() == null || r.getActivateAt().isBefore(now))
                 .filter(r -> r.getExpireAt() == null || r.getExpireAt().isAfter(now))
                 .toList();
     }
 
     public List<MerchRule> getRulesByQuery(String query) {
-        return getApprovedRules().stream()
+        return getLiveRules().stream()
                 .filter(r -> query.equalsIgnoreCase(r.getQuery()))
                 .toList();
     }
@@ -72,7 +87,7 @@ public class MerchRuleService {
         if (rule.getProjectId() == null) rule.setProjectId(TenantContext.getProjectId());
         String currentUser = getCurrentUsername();
         rule.setSubmittedBy(currentUser);
-        rule.setStatus(MerchRule.RuleStatus.PENDING_REVIEW);
+        rule.setStatus(MerchRule.RuleStatus.DRAFT);
         rule.setEnabled(false);
         rule.setCreatedAt(Instant.now());
         rule.setUpdatedAt(Instant.now());
@@ -105,7 +120,11 @@ public class MerchRuleService {
             updated.setTenantId(existing.getTenantId());
             updated.setProjectId(existing.getProjectId());
             updated.setSubmittedBy(existing.getSubmittedBy());
-            updated.setStatus(MerchRule.RuleStatus.PENDING_REVIEW);
+            // DRAFT rules haven't been submitted yet, so editing keeps them DRAFT.
+            // Anything already submitted (or beyond) re-enters review on edit.
+            updated.setStatus(existing.getStatus() == MerchRule.RuleStatus.DRAFT
+                    ? MerchRule.RuleStatus.DRAFT
+                    : MerchRule.RuleStatus.PENDING_REVIEW);
             updated.setEnabled(false);
             updated.setCreatedAt(existing.getCreatedAt());
             updated.setUpdatedAt(Instant.now());
@@ -124,11 +143,37 @@ public class MerchRuleService {
         });
     }
 
-    public Optional<MerchRule> approveRule(String id, String comment) {
+    /**
+     * NR-68: MERCHANDISER submits a DRAFT rule for APPROVER review.
+     */
+    public Optional<MerchRule> submitForReview(String id) {
+        String currentUser = getCurrentUsername();
+        return repository.findById(id).map(rule -> {
+            if (rule.getStatus() != MerchRule.RuleStatus.DRAFT) {
+                throw new IllegalArgumentException(
+                        "Only DRAFT rules can be submitted for review (current status: " + rule.getStatus() + ")");
+            }
+            rule.setStatus(MerchRule.RuleStatus.PENDING_REVIEW);
+            rule.setUpdatedAt(Instant.now());
+            MerchRule saved = repository.save(rule);
+            versionService.snapshot(saved, currentUser, "Submitted for review");
+            log.info("RULE_SUBMITTED id={} query={} by={}", rule.getId(), rule.getQuery(), currentUser);
+            notificationService.notifySubmitted(saved);
+            return saved;
+        });
+    }
+
+    /**
+     * NR-68: PENDING_REVIEW -> APPROVED, then possibly straight on to LIVE in
+     * this same action — either because the tenant has auto-publish on
+     * (default), or because the approver explicitly chose "approve and
+     * publish" (publishNow). Otherwise the rule sits at APPROVED until an
+     * ADMIN/TENANT_ADMIN calls promoteToLive separately.
+     */
+    public Optional<MerchRule> approveRule(String id, String comment, boolean publishNow) {
         String currentUser = getCurrentUsername();
         return repository.findById(id).map(rule -> {
             rule.setStatus(MerchRule.RuleStatus.APPROVED);
-            rule.setEnabled(true);
             rule.setApprovedBy(currentUser);
             rule.setReviewComment(comment);
             rule.setUpdatedAt(Instant.now());
@@ -136,14 +181,95 @@ public class MerchRuleService {
             versionService.snapshot(saved, currentUser,
                     comment == null || comment.isBlank() ? "Rule approved" : "Rule approved: " + comment);
             log.info("RULE_APPROVED id={} query={} by={} comment={}", rule.getId(), rule.getQuery(), rule.getApprovedBy(), comment);
+
+            boolean autoPublish = tenantRepository.findById(saved.getTenantId())
+                    .map(Tenant::isAutoPublishRules).orElse(true);
+            boolean wentLive = false;
+            if (autoPublish) {
+                saved = doPromoteToLive(saved, "system", "Auto-published (tenant auto-publish enabled)");
+                auditService.logAsSystem("RULE_PROMOTED_LIVE", "MerchRule", saved.getId(), "auto-publish");
+                wentLive = true;
+            } else if (publishNow) {
+                saved = doPromoteToLive(saved, currentUser, "Approved and published by " + currentUser);
+                auditService.log("RULE_PROMOTED_LIVE", "MerchRule", saved.getId(), "approver-initiated publish");
+                wentLive = true;
+            }
+
+            notificationService.notifyApproved(saved, comment, wentLive);
             return saved;
         });
     }
 
+    /**
+     * NR-68: ADMIN/TENANT_ADMIN manually promotes an APPROVED rule to LIVE —
+     * used when the tenant's auto-publish setting is off and the approver
+     * didn't publish at approval time. Sends its own "now live" email since
+     * the earlier approval email would have said "pending publish."
+     */
+    public Optional<MerchRule> promoteToLive(String id) {
+        String currentUser = getCurrentUsername();
+        return repository.findById(id).map(rule -> {
+            if (rule.getStatus() != MerchRule.RuleStatus.APPROVED) {
+                throw new IllegalArgumentException(
+                        "Only APPROVED rules can be promoted to LIVE (current status: " + rule.getStatus() + ")");
+            }
+            MerchRule saved = doPromoteToLive(rule, currentUser, "Promoted to live");
+            log.info("RULE_PROMOTED_LIVE id={} query={} by={}", rule.getId(), rule.getQuery(), currentUser);
+            notificationService.notifyPublished(saved);
+            return saved;
+        });
+    }
+
+    /**
+     * NR-68: ADMIN/TENANT_ADMIN force-reverts a LIVE rule back to APPROVED
+     * (default) or DRAFT, immediately taking it off search traffic.
+     */
+    public Optional<MerchRule> demoteFromLive(String id, String targetStatus) {
+        String currentUser = getCurrentUsername();
+        MerchRule.RuleStatus target;
+        try {
+            target = (targetStatus == null || targetStatus.isBlank())
+                    ? MerchRule.RuleStatus.APPROVED
+                    : MerchRule.RuleStatus.valueOf(targetStatus.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Unknown target status: " + targetStatus);
+        }
+        if (target != MerchRule.RuleStatus.APPROVED && target != MerchRule.RuleStatus.DRAFT) {
+            throw new IllegalArgumentException("Rules can only be demoted to APPROVED or DRAFT, not " + target);
+        }
+        return repository.findById(id).map(rule -> {
+            if (rule.getStatus() != MerchRule.RuleStatus.LIVE) {
+                throw new IllegalArgumentException(
+                        "Only LIVE rules can be demoted (current status: " + rule.getStatus() + ")");
+            }
+            rule.setStatus(target);
+            rule.setEnabled(false);
+            rule.setUpdatedAt(Instant.now());
+            MerchRule saved = repository.save(rule);
+            versionService.snapshot(saved, currentUser, "Reverted from live to " + target);
+            log.info("RULE_DEMOTED id={} query={} to={} by={}", rule.getId(), rule.getQuery(), target, currentUser);
+            return saved;
+        });
+    }
+
+    private MerchRule doPromoteToLive(MerchRule rule, String actor, String versionNote) {
+        rule.setStatus(MerchRule.RuleStatus.LIVE);
+        rule.setEnabled(true);
+        rule.setUpdatedAt(Instant.now());
+        MerchRule saved = repository.save(rule);
+        versionService.snapshot(saved, actor, versionNote);
+        return saved;
+    }
+
+    /**
+     * NR-68: rejected rules bounce back to DRAFT with the reason attached
+     * (rather than sitting in a persisted REJECTED state) so the creator can
+     * fix and resubmit. REJECTED remains the audit-log action name/version note.
+     */
     public Optional<MerchRule> rejectRule(String id, String comment) {
         String currentUser = getCurrentUsername();
         return repository.findById(id).map(rule -> {
-            rule.setStatus(MerchRule.RuleStatus.REJECTED);
+            rule.setStatus(MerchRule.RuleStatus.DRAFT);
             rule.setEnabled(false);
             rule.setApprovedBy(currentUser);
             rule.setReviewComment(comment);
@@ -152,6 +278,7 @@ public class MerchRuleService {
             versionService.snapshot(saved, currentUser,
                     comment == null || comment.isBlank() ? "Rule rejected" : "Rule rejected: " + comment);
             log.info("RULE_REJECTED id={} query={} by={} comment={}", rule.getId(), rule.getQuery(), rule.getApprovedBy(), comment);
+            notificationService.notifyRejected(saved, comment);
             return saved;
         });
     }
@@ -192,11 +319,11 @@ public class MerchRuleService {
         List<Map<String, Object>> conflicts = new ArrayList<>();
 
         boolean hasPin = rules.stream().anyMatch(r -> r.getType() == MerchRule.RuleType.PIN &&
-                r.getStatus() == MerchRule.RuleStatus.APPROVED);
+                r.getStatus() == MerchRule.RuleStatus.LIVE);
         boolean hasBoost = rules.stream().anyMatch(r -> r.getType() == MerchRule.RuleType.BOOST &&
-                r.getStatus() == MerchRule.RuleStatus.APPROVED);
+                r.getStatus() == MerchRule.RuleStatus.LIVE);
         boolean hasBury = rules.stream().anyMatch(r -> r.getType() == MerchRule.RuleType.BURY &&
-                r.getStatus() == MerchRule.RuleStatus.APPROVED);
+                r.getStatus() == MerchRule.RuleStatus.LIVE);
 
         if (hasPin && hasBoost) {
             Map<String, Object> conflict = new java.util.LinkedHashMap<>();
@@ -224,7 +351,7 @@ public class MerchRuleService {
         }
 
         rules.stream()
-            .filter(r -> r.getStatus() == MerchRule.RuleStatus.APPROVED)
+            .filter(r -> r.getStatus() == MerchRule.RuleStatus.LIVE)
             .collect(java.util.stream.Collectors.groupingBy(MerchRule::getType))
             .forEach((type, typeRules) -> {
                 if (typeRules.size() > 1) {
@@ -247,7 +374,7 @@ public class MerchRuleService {
         List<MerchRule> existing = repository.findByTenantIdAndProjectIdAndQueryAndEnabled(
                 tenantId, projectId, rule.getQuery(), true)
                 .stream()
-                .filter(r -> r.getStatus() == MerchRule.RuleStatus.APPROVED)
+                .filter(r -> r.getStatus() == MerchRule.RuleStatus.LIVE)
                 .sorted(java.util.Comparator.comparingInt(MerchRule::getPriority))
                 .collect(java.util.stream.Collectors.toList());
 
@@ -281,7 +408,7 @@ public class MerchRuleService {
 
         List<MerchRule> allRules = repository.findByTenantIdAndProjectId(tenantId, projectId);
         List<MerchRule> result = allRules.stream()
-                .filter(r -> r.getStatus() == MerchRule.RuleStatus.APPROVED && r.isEnabled())
+                .filter(r -> r.getStatus() == MerchRule.RuleStatus.LIVE && r.isEnabled())
                 .filter(r -> r.getActivateAt() == null || r.getActivateAt().isBefore(now))
                 .filter(r -> r.getExpireAt() == null || r.getExpireAt().isAfter(now))
                 .filter(r -> {

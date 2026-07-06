@@ -1,0 +1,1 @@
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS auto_publish_rules BOOLEAN NOT NULL DEFAULT true;

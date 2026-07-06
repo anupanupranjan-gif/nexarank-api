@@ -93,7 +93,7 @@ public class MerchRule {
 
     public enum RuleType { BOOST, PIN, BURY, SYNONYM }
 
-    public enum RuleStatus { DRAFT, PENDING_REVIEW, APPROVED, REJECTED, DISABLED }
+    public enum RuleStatus { DRAFT, PENDING_REVIEW, APPROVED, LIVE, REJECTED, DISABLED }
     public enum SynonymDirection { TWO_WAY, ONE_WAY }
 
     public String getId() { return id; }

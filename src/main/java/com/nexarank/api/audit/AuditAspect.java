@@ -42,6 +42,39 @@ public class AuditAspect {
         return result;
     }
 
+    @Around("execution(* com.nexarank.api.service.MerchRuleService.submitForReview(..))")
+    public Object auditSubmitForReview(ProceedingJoinPoint pjp) throws Throwable {
+        Object[] args = pjp.getArgs();
+        Object result = pjp.proceed();
+        try {
+            String id = args.length > 0 ? args[0].toString() : "unknown";
+            auditService.log("RULE_SUBMITTED", "MerchRule", id, null);
+        } catch (Exception ignored) {}
+        return result;
+    }
+
+    @Around("execution(* com.nexarank.api.service.MerchRuleService.promoteToLive(..))")
+    public Object auditPromoteToLive(ProceedingJoinPoint pjp) throws Throwable {
+        Object[] args = pjp.getArgs();
+        Object result = pjp.proceed();
+        try {
+            String id = args.length > 0 ? args[0].toString() : "unknown";
+            auditService.log("RULE_PROMOTED_LIVE", "MerchRule", id, null);
+        } catch (Exception ignored) {}
+        return result;
+    }
+
+    @Around("execution(* com.nexarank.api.service.MerchRuleService.demoteFromLive(..))")
+    public Object auditDemoteFromLive(ProceedingJoinPoint pjp) throws Throwable {
+        Object[] args = pjp.getArgs();
+        Object result = pjp.proceed();
+        try {
+            String id = args.length > 0 ? args[0].toString() : "unknown";
+            auditService.log("RULE_DEMOTED", "MerchRule", id, null);
+        } catch (Exception ignored) {}
+        return result;
+    }
+
     @Around("execution(* com.nexarank.api.service.MerchRuleService.approveRule(..))")
     public Object auditApproveRule(ProceedingJoinPoint pjp) throws Throwable {
         Object[] args = pjp.getArgs();
