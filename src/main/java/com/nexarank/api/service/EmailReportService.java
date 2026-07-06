@@ -2,9 +2,11 @@
 package com.nexarank.api.service;
 
 import com.nexarank.api.model.MerchRule;
+import com.nexarank.api.model.User;
 import com.nexarank.api.model.WatchedQuery;
 import com.nexarank.api.repository.ClickEventRepository;
 import com.nexarank.api.repository.MerchRuleRepository;
+import com.nexarank.api.repository.UserRepository;
 import com.nexarank.api.repository.ZeroResultQueryRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,7 +25,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Sends weekly digest email reports to configured recipients.
+ * Sends weekly digest email reports to all users of a tenant with an email on file.
  *
  * Content:
  * - Rule performance summary (active, pending, never-fired)
@@ -48,9 +50,7 @@ public class EmailReportService {
     private final WatchedQueryService watchedQueryService;
     private final AiRuleSuggestionService suggestionService;
     private final BusinessSignalService signalService;
-
-    @Value("${nexarank.report.recipients:modernreliability@gmail.com}")
-    private String recipients;
+    private final UserRepository userRepository;
 
     @Value("${nexarank.report.from:modernreliability@gmail.com}")
     private String fromAddress;
@@ -64,7 +64,8 @@ public class EmailReportService {
                                ZeroResultQueryRepository zeroResultRepository,
                                WatchedQueryService watchedQueryService,
                                AiRuleSuggestionService suggestionService,
-                               BusinessSignalService signalService) {
+                               BusinessSignalService signalService,
+                               UserRepository userRepository) {
         this.mailSender           = mailSender;
         this.ruleRepository       = ruleRepository;
         this.clickEventRepository = clickEventRepository;
@@ -72,6 +73,7 @@ public class EmailReportService {
         this.watchedQueryService  = watchedQueryService;
         this.suggestionService    = suggestionService;
         this.signalService        = signalService;
+        this.userRepository       = userRepository;
     }
 
     /**
@@ -95,8 +97,9 @@ public class EmailReportService {
     // ── Internal ──────────────────────────────────────────────────────────────
 
     private void sendReport(String tenantId, String projectId, int days) {
-        for (String recipient : recipients.split(",")) {
-            sendReportToRecipient(tenantId, projectId, days, recipient.trim());
+        List<User> recipients = userRepository.findByTenantIdAndEmailIsNotNull(tenantId);
+        for (User recipient : recipients) {
+            sendReportToRecipient(tenantId, projectId, days, recipient.getEmail());
         }
     }
 

@@ -58,7 +58,6 @@ nexarank:
     base-url: http://search-api.default.svc.cluster.local/api/v1
     api-key: searchx-dev-key-2026
   report:
-    recipients: modernreliability@gmail.com
     from: modernreliability@gmail.com
     cron: "0 0 8 * * MON"
 
