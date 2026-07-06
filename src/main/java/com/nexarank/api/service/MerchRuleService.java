@@ -307,6 +307,16 @@ public class MerchRuleService {
         return repository.save(rule);
     }
 
+    /**
+     * NR-36: increments fired_count/last_fired_at for rules that actually
+     * produced an instruction (boost/pin/bury/synonym) on this request.
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public void recordFired(List<String> ruleIds) {
+        if (ruleIds == null || ruleIds.isEmpty()) return;
+        repository.incrementFiredCount(ruleIds, Instant.now());
+    }
+
     private void deserializeTransientFields(MerchRule rule) {
         try {
             com.fasterxml.jackson.databind.ObjectMapper mapper =

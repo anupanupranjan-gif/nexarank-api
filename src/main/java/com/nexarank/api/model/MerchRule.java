@@ -79,6 +79,12 @@ public class MerchRule {
     @Column(name = "updated_at")
     private Instant updatedAt = Instant.now();
 
+    @Column(name = "fired_count", nullable = false)
+    private long firedCount = 0;
+
+    @Column(name = "last_fired_at")
+    private Instant lastFiredAt;
+
     @Transient
     private List<String> pinnedIds;
 
@@ -134,6 +140,10 @@ public class MerchRule {
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+    public long getFiredCount() { return firedCount; }
+    public void setFiredCount(long firedCount) { this.firedCount = firedCount; }
+    public Instant getLastFiredAt() { return lastFiredAt; }
+    public void setLastFiredAt(Instant lastFiredAt) { this.lastFiredAt = lastFiredAt; }
     public List<String> getPinnedIds() { return pinnedIds; }
     public void setPinnedIds(List<String> pinnedIds) { this.pinnedIds = pinnedIds; }
     public List<String> getSynonyms() { return synonyms; }

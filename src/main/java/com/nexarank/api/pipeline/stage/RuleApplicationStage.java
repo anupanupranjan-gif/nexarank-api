@@ -138,6 +138,12 @@ public class RuleApplicationStage implements PipelineStage {
 
             context.setEnrichedQuery(result);
 
+            try {
+                ruleService.recordFired(result.getAppliedRules());
+            } catch (Exception metricsEx) {
+                log.warn("RULE_APPLICATION: failed to record fired-count metrics: {}", metricsEx.getMessage());
+            }
+
             long took = System.currentTimeMillis() - start;
             String output = String.format("rules=%d boosts=%d pins=%d buries=%d",
                 result.getAppliedRules().size(),

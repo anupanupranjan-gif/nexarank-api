@@ -34,6 +34,14 @@ public interface ClickEventRepository extends JpaRepository<ClickEvent, String> 
                                           @Param("since") Instant since);
 
     long countByTenantIdAndProjectId(String tenantId, String projectId);
+
+    @Query("SELECT c.query, SUM(COALESCE(c.productPrice, 0)) " +
+           "FROM ClickEvent c WHERE c.tenantId = :tenantId AND c.projectId = :projectId " +
+           "AND c.clickedAt >= :since GROUP BY c.query")
+    List<Object[]> findRevenueByQuery(@Param("tenantId") String tenantId,
+                                       @Param("projectId") String projectId,
+                                       @Param("since") Instant since);
+
     @Query("SELECT c.productId, COUNT(c) as clickCount " +
             "FROM ClickEvent c " +
             "WHERE c.tenantId = :tenantId AND c.projectId = :projectId " +

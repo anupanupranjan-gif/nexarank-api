@@ -35,6 +35,9 @@ public class ClickEventController {
         if (body.get("position") != null) {
             event.setPosition(((Number) body.get("position")).intValue());
         }
+        if (body.get("price") != null) {
+            event.setProductPrice(((Number) body.get("price")).doubleValue());
+        }
         event.setClickedAt(Instant.now());
         clickEventRepository.save(event);
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", event.getId()));

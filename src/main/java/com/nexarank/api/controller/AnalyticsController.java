@@ -157,13 +157,45 @@ public class AnalyticsController {
     }
 
     @GetMapping("/rules-performance")
-    public ResponseEntity<?> getRulesPerformance() {
+    public ResponseEntity<?> getRulesPerformance(@RequestParam(defaultValue = "30") int days) {
         String tenantId = TenantContext.getTenantId();
         String projectId = TenantContext.getProjectId();
+        Instant since = Instant.now().minus(days, ChronoUnit.DAYS);
 
         var rules = merchRuleRepository.findByTenantIdAndProjectId(tenantId, projectId);
 
+        // Query-level clicks/impressions (from search_events) for CTR + CTR lift.
+        List<Object[]> queryStats = clickEventRepository.findQueryStats(tenantId, projectId, since);
+        long totalClicks = 0, totalImpressions = 0;
+        for (Object[] row : queryStats) {
+            totalClicks += ((Number) row[1]).longValue();
+            totalImpressions += ((Number) row[2]).longValue();
+        }
+        double avgCtr = totalImpressions > 0 ? (double) totalClicks / totalImpressions : 0.0;
+
+        List<Object[]> revenueStats = clickEventRepository.findRevenueByQuery(tenantId, projectId, since);
+
         List<Map<String, Object>> performance = rules.stream().map(rule -> {
+            // Approximate attribution: aggregate clicks/impressions/revenue across every
+            // searched query that would have matched this rule's query text (whole-word,
+            // case-insensitive — same semantics as MerchRuleService.containsRuleQuery).
+            // There's no per-click rule attribution today, so this is a query-level proxy,
+            // not an exact per-fire measurement.
+            long ruleClicks = 0, ruleImpressions = 0;
+            for (Object[] row : queryStats) {
+                if (queryMatchesRule((String) row[0], rule.getQuery())) {
+                    ruleClicks += ((Number) row[1]).longValue();
+                    ruleImpressions += ((Number) row[2]).longValue();
+                }
+            }
+            double revenue = 0;
+            for (Object[] row : revenueStats) {
+                if (queryMatchesRule((String) row[0], rule.getQuery())) {
+                    revenue += ((Number) row[1]).doubleValue();
+                }
+            }
+            double ctr = ruleImpressions > 0 ? (double) ruleClicks / ruleImpressions : 0.0;
+
             Map<String, Object> r = new LinkedHashMap<>();
             r.put("id", rule.getId());
             r.put("type", rule.getType());
@@ -173,9 +205,27 @@ public class AnalyticsController {
             r.put("createdAt", rule.getCreatedAt());
             r.put("submittedBy", rule.getSubmittedBy());
             r.put("approvedBy", rule.getApprovedBy());
+            r.put("firedCount", rule.getFiredCount());
+            r.put("lastFiredAt", rule.getLastFiredAt());
+            r.put("neverFired", rule.getFiredCount() == 0);
+            r.put("ctr", Math.round(ctr * 1000.0) / 1000.0);
+            r.put("ctrLift", Math.round((ctr - avgCtr) * 1000.0) / 1000.0);
+            r.put("revenueImpact", Math.round(revenue * 100.0) / 100.0);
             return r;
         }).collect(Collectors.toList());
 
-        return ResponseEntity.ok(performance);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("rules", performance);
+        response.put("avgCtr", Math.round(avgCtr * 1000.0) / 1000.0);
+        response.put("periodDays", days);
+
+        return ResponseEntity.ok(response);
+    }
+
+    private boolean queryMatchesRule(String searchedQuery, String ruleQuery) {
+        if (searchedQuery == null || ruleQuery == null) return false;
+        if (searchedQuery.equalsIgnoreCase(ruleQuery)) return true;
+        String pattern = "(?i)(^|\\s)" + java.util.regex.Pattern.quote(ruleQuery) + "(\\s|$)";
+        return java.util.regex.Pattern.compile(pattern).matcher(searchedQuery).find();
     }
 }

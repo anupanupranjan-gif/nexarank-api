@@ -35,6 +35,9 @@ public class ClickEvent {
     @Column(name = "clicked_at")
     private Instant clickedAt = Instant.now();
 
+    @Column(name = "product_price")
+    private Double productPrice;
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getTenantId() { return tenantId; }
@@ -53,4 +56,6 @@ public class ClickEvent {
     public void setPosition(Integer position) { this.position = position; }
     public Instant getClickedAt() { return clickedAt; }
     public void setClickedAt(Instant clickedAt) { this.clickedAt = clickedAt; }
+    public Double getProductPrice() { return productPrice; }
+    public void setProductPrice(Double productPrice) { this.productPrice = productPrice; }
 }
