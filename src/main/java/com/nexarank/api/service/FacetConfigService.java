@@ -47,6 +47,8 @@ public class FacetConfigService {
     public Optional<FacetConfig> updateFacet(String id, FacetConfig updated) {
         return repository.findById(id).map(existing -> {
             updated.setId(existing.getId());
+            updated.setTenantId(existing.getTenantId());
+            updated.setProjectId(existing.getProjectId());
             updated.setCreatedAt(existing.getCreatedAt());
             updated.setUpdatedAt(Instant.now());
             return repository.save(updated);
