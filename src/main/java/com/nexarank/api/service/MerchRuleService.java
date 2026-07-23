@@ -31,19 +31,22 @@ public class MerchRuleService {
     private final RuleNotificationService notificationService;
     private final TenantRepository tenantRepository;
     private final AuditService auditService;
+    private final RulesCacheVersionService cacheVersionService;
 
     public MerchRuleService(MerchRuleRepository repository,
                              RuleVersionService versionService,
                              RuleTriggerConditionService triggerService,
                              RuleNotificationService notificationService,
                              TenantRepository tenantRepository,
-                             AuditService auditService) {
+                             AuditService auditService,
+                             RulesCacheVersionService cacheVersionService) {
         this.repository     = repository;
         this.versionService = versionService;
         this.triggerService = triggerService;
         this.notificationService = notificationService;
         this.tenantRepository = tenantRepository;
         this.auditService = auditService;
+        this.cacheVersionService = cacheVersionService;
     }
 
     public List<MerchRule> getAllRules() {
@@ -103,6 +106,7 @@ public class MerchRuleService {
             triggerService.saveConditions(saved.getId(), dtos);
         }
         log.info("RULE_CREATED type={} query={} by={}", rule.getType(), rule.getQuery(), rule.getSubmittedBy());
+        cacheVersionService.bump(saved.getTenantId(), saved.getProjectId());
         return saved;
     }
 
@@ -139,6 +143,7 @@ public class MerchRuleService {
                             return d; }).toList();
                 triggerService.saveConditions(saved.getId(), dtos);
             }
+            cacheVersionService.bump(saved.getTenantId(), saved.getProjectId());
             return saved;
         });
     }
@@ -158,6 +163,7 @@ public class MerchRuleService {
             MerchRule saved = repository.save(rule);
             versionService.snapshot(saved, currentUser, "Submitted for review");
             log.info("RULE_SUBMITTED id={} query={} by={}", rule.getId(), rule.getQuery(), currentUser);
+            cacheVersionService.bump(saved.getTenantId(), saved.getProjectId());
             notificationService.notifySubmitted(saved);
             return saved;
         });
@@ -248,6 +254,7 @@ public class MerchRuleService {
             MerchRule saved = repository.save(rule);
             versionService.snapshot(saved, currentUser, "Reverted from live to " + target);
             log.info("RULE_DEMOTED id={} query={} to={} by={}", rule.getId(), rule.getQuery(), target, currentUser);
+            cacheVersionService.bump(saved.getTenantId(), saved.getProjectId());
             return saved;
         });
     }
@@ -258,6 +265,7 @@ public class MerchRuleService {
         rule.setUpdatedAt(Instant.now());
         MerchRule saved = repository.save(rule);
         versionService.snapshot(saved, actor, versionNote);
+        cacheVersionService.bump(saved.getTenantId(), saved.getProjectId());
         return saved;
     }
 
@@ -278,6 +286,7 @@ public class MerchRuleService {
             versionService.snapshot(saved, currentUser,
                     comment == null || comment.isBlank() ? "Rule rejected" : "Rule rejected: " + comment);
             log.info("RULE_REJECTED id={} query={} by={} comment={}", rule.getId(), rule.getQuery(), rule.getApprovedBy(), comment);
+            cacheVersionService.bump(saved.getTenantId(), saved.getProjectId());
             notificationService.notifyRejected(saved, comment);
             return saved;
         });
@@ -287,11 +296,15 @@ public class MerchRuleService {
         return repository.findById(id).map(rule -> {
             rule.setEnabled(!rule.isEnabled());
             rule.setUpdatedAt(Instant.now());
-            return repository.save(rule);
+            MerchRule saved = repository.save(rule);
+            cacheVersionService.bump(saved.getTenantId(), saved.getProjectId());
+            return saved;
         });
     }
 
     public void deleteRule(String id) {
+        repository.findById(id).ifPresent(rule ->
+                cacheVersionService.bump(rule.getTenantId(), rule.getProjectId()));
         repository.deleteById(id);
     }
 
@@ -306,6 +319,7 @@ public class MerchRuleService {
                     MerchRule saved = repository.save(restored);
                     versionService.snapshot(saved, currentUser, "Restored from v" + versionNumber);
                     log.info("RULE_ROLLBACK id={} toVersion={} by={}", id, versionNumber, currentUser);
+                    cacheVersionService.bump(saved.getTenantId(), saved.getProjectId());
                     return saved;
                 });
     }
@@ -431,7 +445,9 @@ public class MerchRuleService {
      */
     public MerchRule saveDirectly(MerchRule rule) {
         rule.setUpdatedAt(java.time.Instant.now());
-        return repository.save(rule);
+        MerchRule saved = repository.save(rule);
+        cacheVersionService.bump(saved.getTenantId(), saved.getProjectId());
+        return saved;
     }
 
     /**

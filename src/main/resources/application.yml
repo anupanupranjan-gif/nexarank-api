@@ -1,6 +1,10 @@
 spring:
   application:
     name: nexarank-api
+  data:
+    redis:
+      host: ${REDIS_HOST:redis-master.default.svc.cluster.local}
+      port: ${REDIS_PORT:6379}
   datasource:
     url: ${DB_URL:jdbc:postgresql://nexarank-postgres-postgresql.default.svc.cluster.local:5432/nexarank}
     username: ${DB_USERNAME:nexarank}
