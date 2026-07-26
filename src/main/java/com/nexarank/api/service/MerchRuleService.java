@@ -132,6 +132,13 @@ public class MerchRuleService {
             updated.setEnabled(false);
             updated.setCreatedAt(existing.getCreatedAt());
             updated.setUpdatedAt(Instant.now());
+            // Preserve the zero-result-query link (NR-69) across edits unless the
+            // caller explicitly supplies a new one — otherwise a routine edit (e.g.
+            // tweaking the AI-suggested synonyms) would silently null it out, since
+            // this endpoint replaces the whole entity from the request body.
+            if (updated.getSourceZeroResultQuery() == null) {
+                updated.setSourceZeroResultQuery(existing.getSourceZeroResultQuery());
+            }
             serializeTransientFields(updated);
             MerchRule saved = repository.save(updated);
             versionService.snapshot(saved, getCurrentUsername(), "Rule updated");

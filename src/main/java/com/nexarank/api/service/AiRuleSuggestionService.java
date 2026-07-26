@@ -218,23 +218,53 @@ public class AiRuleSuggestionService {
             return fallbackSynonym(query);
         }
 
-        String prompt = String.format(
-            "A customer searched for '%s' on an eCommerce site and got zero results. " +
-            "Suggest 2-3 alternative search terms or synonyms. " +
-            "Reply with ONLY the synonyms separated by commas. No explanation.",
-            query
-        );
-
         try {
-            return llmAdapterFactory.getAdapter(llmConfig).rewrite(query, prompt + "\n%s\nSynonyms:", llmConfig);
+            return callLlmForSynonyms(query, llmConfig);
         } catch (Exception e) {
             log.warn("LLM synonym suggestion failed for '{}': {}", query, e.getMessage());
             return fallbackSynonym(query);
         }
     }
 
+    private String callLlmForSynonyms(String query, LlmConfig llmConfig) {
+        String prompt = String.format(
+            "A customer searched for '%s' on an eCommerce site and got zero results. " +
+            "Suggest 2-3 alternative search terms or synonyms. " +
+            "Reply with ONLY the synonyms separated by commas. No explanation.",
+            query
+        );
+        return llmAdapterFactory.getAdapter(llmConfig).rewrite(query, prompt + "\n%s\nSynonyms:", llmConfig);
+    }
+
     private String fallbackSynonym(String query) {
         return query + " alternative, " + query + " replacement";
+    }
+
+    /**
+     * Suggest a rule type + trigger content for a single zero-result query, for the
+     * "Create Rule" action on the zero-result query list (NR-69). Defaults to SYNONYM
+     * with a real LLM-generated suggestion when an LLM is configured and reachable;
+     * falls back to BOOST (no meaningful synonym signal for a query with zero matches
+     * to reorder anyway) when no LLM is configured or the call fails, letting the
+     * merchandiser configure it manually.
+     */
+    public Map<String, Object> suggestRuleTypeForQuery(String query) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        LlmConfig llmConfig = llmConfigService.getConfig().orElse(null);
+        if (llmConfig == null) {
+            result.put("type", "BOOST");
+            result.put("aiSuggestion", null);
+            return result;
+        }
+        try {
+            result.put("type", "SYNONYM");
+            result.put("aiSuggestion", callLlmForSynonyms(query, llmConfig));
+        } catch (Exception e) {
+            log.warn("LLM rule-type suggestion failed for '{}': {} — defaulting to BOOST", query, e.getMessage());
+            result.put("type", "BOOST");
+            result.put("aiSuggestion", null);
+        }
+        return result;
     }
     /**
      * Check watched queries against actual performance and return alerts.

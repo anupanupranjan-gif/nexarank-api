@@ -27,6 +27,11 @@ public class AiSuggestionController {
         return ResponseEntity.ok(suggestionService.suggestSynonymsForZeroResults());
     }
 
+    @GetMapping("/rule-type-for-query")
+    public ResponseEntity<?> getRuleTypeForQuery(@RequestParam String query) {
+        return ResponseEntity.ok(suggestionService.suggestRuleTypeForQuery(query));
+    }
+
     @PostMapping("/apply")
     public ResponseEntity<?> applySuggestion(@RequestBody Map<String, Object> suggestion) {
         return ResponseEntity.ok(suggestionService.createSuggestedRule(suggestion));

@@ -85,6 +85,9 @@ public class MerchRule {
     @Column(name = "last_fired_at")
     private Instant lastFiredAt;
 
+    @Column(name = "source_zero_result_query")
+    private String sourceZeroResultQuery;
+
     @Transient
     private List<String> pinnedIds;
 
@@ -144,6 +147,8 @@ public class MerchRule {
     public void setFiredCount(long firedCount) { this.firedCount = firedCount; }
     public Instant getLastFiredAt() { return lastFiredAt; }
     public void setLastFiredAt(Instant lastFiredAt) { this.lastFiredAt = lastFiredAt; }
+    public String getSourceZeroResultQuery() { return sourceZeroResultQuery; }
+    public void setSourceZeroResultQuery(String sourceZeroResultQuery) { this.sourceZeroResultQuery = sourceZeroResultQuery; }
     public List<String> getPinnedIds() { return pinnedIds; }
     public void setPinnedIds(List<String> pinnedIds) { this.pinnedIds = pinnedIds; }
     public List<String> getSynonyms() { return synonyms; }

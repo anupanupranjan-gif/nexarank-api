@@ -24,6 +24,9 @@ public interface SearchEventRepository extends JpaRepository<SearchEvent, String
     long countByTenantIdAndProjectIdAndSearchedAtBetween(
             String tenantId, String projectId, Instant start, Instant end);
 
+    boolean existsByTenantIdAndProjectIdAndQueryIgnoreCaseAndResultCountGreaterThanAndSearchedAtAfter(
+            String tenantId, String projectId, String query, int resultCount, Instant since);
+
     @Query("SELECT AVG(s.tookMs) FROM SearchEvent s WHERE s.tenantId = :tenantId " +
            "AND s.projectId = :projectId AND s.searchedAt >= :start AND s.searchedAt < :end " +
            "AND s.tookMs IS NOT NULL")

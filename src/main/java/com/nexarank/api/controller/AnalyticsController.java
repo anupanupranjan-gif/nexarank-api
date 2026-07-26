@@ -47,12 +47,28 @@ public class AnalyticsController {
         List<Object[]> queryStats = clickEventRepository.findQueryStats(tenantId, projectId, since);
         long totalClicks = clickEventRepository.countByTenantIdAndProjectId(tenantId, projectId);
 
-        // Active rules count
-        long activeRules = merchRuleRepository.findByTenantIdAndProjectId(tenantId, projectId)
-                .stream().filter(r -> r.getStatus().name().equals("LIVE") && r.isEnabled()).count();
+        var allRules = merchRuleRepository.findByTenantIdAndProjectId(tenantId, projectId);
 
-        long pendingRules = merchRuleRepository.findByTenantIdAndProjectId(tenantId, projectId)
-                .stream().filter(r -> r.getStatus().name().equals("PENDING_REVIEW")).count();
+        // Active rules count
+        long activeRules = allRules.stream()
+                .filter(r -> r.getStatus().name().equals("LIVE") && r.isEnabled()).count();
+
+        long pendingRules = allRules.stream()
+                .filter(r -> r.getStatus().name().equals("PENDING_REVIEW")).count();
+
+        // Most relevant rule per zero-result query that was actioned via "Create Rule"
+        // (NR-69) — prefer a LIVE rule over any other status if more than one rule was
+        // ever linked to the same query text.
+        Map<String, com.nexarank.api.model.MerchRule> ruleByZeroResultQuery = new java.util.HashMap<>();
+        for (var rule : allRules) {
+            String source = rule.getSourceZeroResultQuery();
+            if (source == null) continue;
+            String key = source.toLowerCase();
+            var existing = ruleByZeroResultQuery.get(key);
+            if (existing == null || (!existing.getStatus().name().equals("LIVE") && rule.getStatus().name().equals("LIVE"))) {
+                ruleByZeroResultQuery.put(key, rule);
+            }
+        }
 
         // Top queries by click volume
         List<Map<String, Object>> topQueries = queryStats.stream()
@@ -89,10 +105,43 @@ public class AnalyticsController {
         // Zero result queries
         long zeroResultCount = zeroResultRepository.countByTenantIdAndProjectIdAndOccurredAtAfter(
                 tenantId, projectId, since);
-        List<Map<String, Object>> topZeroResults = zeroResultRepository
-                .findTopZeroResultQueries(tenantId, projectId, since)
-                .stream().limit(10)
-                .map(row -> Map.of("query", row[0], "occurrences", ((Number) row[1]).longValue()))
+        List<Object[]> allZeroResultQueries = zeroResultRepository
+                .findTopZeroResultQueries(tenantId, projectId, since);
+
+        // actioned = a rule was created via "Create Rule" (NR-69) linking back to this
+        // exact query text; resolved = that rule is LIVE+enabled and a search for the
+        // same query has since returned results. Approximate signal (same spirit as the
+        // query-level rule-performance attribution above) — a search event with the
+        // same text could in principle predate the rule, but that's the accepted
+        // tradeoff rather than building an exact time-ordered join for a dev/demo tool.
+        long zeroResultActionedCount = 0, zeroResultUnactionedCount = 0;
+        for (Object[] row : allZeroResultQueries) {
+            String query = (String) row[0];
+            if (ruleByZeroResultQuery.containsKey(query.toLowerCase())) zeroResultActionedCount++;
+            else zeroResultUnactionedCount++;
+        }
+
+        List<Map<String, Object>> topZeroResults = allZeroResultQueries.stream().limit(10)
+                .map(row -> {
+                    String query = (String) row[0];
+                    Map<String, Object> z = new LinkedHashMap<>();
+                    z.put("query", query);
+                    z.put("occurrences", ((Number) row[1]).longValue());
+                    var rule = ruleByZeroResultQuery.get(query.toLowerCase());
+                    boolean actioned = rule != null;
+                    boolean resolved = actioned
+                            && rule.getStatus().name().equals("LIVE") && rule.isEnabled()
+                            && searchEventRepository.existsByTenantIdAndProjectIdAndQueryIgnoreCaseAndResultCountGreaterThanAndSearchedAtAfter(
+                                    tenantId, projectId, query, 0, since);
+                    z.put("actioned", actioned);
+                    z.put("resolved", resolved);
+                    if (rule != null) {
+                        z.put("ruleId", rule.getId());
+                        z.put("ruleType", rule.getType());
+                        z.put("ruleStatus", rule.getStatus());
+                    }
+                    return z;
+                })
                 .collect(Collectors.toList());
 
         // Latest quality score
@@ -109,6 +158,8 @@ public class AnalyticsController {
         overview.put("zeroResultRate", Math.round(zeroResultRate * 1000.0) / 1000.0);
         overview.put("avgLatencyMs", avgLatencyMs != null ? Math.round(avgLatencyMs) : null);
         overview.put("zeroResultCount", zeroResultCount);
+        overview.put("zeroResultActionedCount", zeroResultActionedCount);
+        overview.put("zeroResultUnactionedCount", zeroResultUnactionedCount);
         overview.put("topZeroResultQueries", topZeroResults);
         overview.put("topQueries", topQueries);
         overview.put("latestNdcg10", latestQuality.map(q -> q.getNdcgAt10()).orElse(null));
