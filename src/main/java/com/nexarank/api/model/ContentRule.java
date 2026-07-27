@@ -54,13 +54,31 @@ public class ContentRule {
     @Column(name = "created_by")
     private String createdBy;
 
+    @Column(name = "submitted_by")
+    private String submittedBy;
+
+    @Column(name = "approved_by")
+    private String approvedBy;
+
+    @Column(name = "rejection_comment")
+    private String rejectionComment;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
     @Transient
     private List<RuleTriggerCondition> triggerConditions;
 
     @Transient
     private Map<String, String> contentPayload;
 
-    public enum ContentRuleStatus { DRAFT, ACTIVE, INACTIVE }
+    /**
+     * PENDING_REVIEW added for NR-84's maker-checker workflow — not in NR-82's
+     * original DRAFT/ACTIVE/INACTIVE spec, but submit/approve/reject need a
+     * state in between. Safe to add without a migration since status is a
+     * plain VARCHAR(50) column with no DB-level enum constraint.
+     */
+    public enum ContentRuleStatus { DRAFT, PENDING_REVIEW, ACTIVE, INACTIVE }
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -90,6 +108,14 @@ public class ContentRule {
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
     public String getCreatedBy() { return createdBy; }
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
+    public String getSubmittedBy() { return submittedBy; }
+    public void setSubmittedBy(String submittedBy) { this.submittedBy = submittedBy; }
+    public String getApprovedBy() { return approvedBy; }
+    public void setApprovedBy(String approvedBy) { this.approvedBy = approvedBy; }
+    public String getRejectionComment() { return rejectionComment; }
+    public void setRejectionComment(String rejectionComment) { this.rejectionComment = rejectionComment; }
+    public Instant getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(Instant deletedAt) { this.deletedAt = deletedAt; }
     public List<RuleTriggerCondition> getTriggerConditions() { return triggerConditions; }
     public void setTriggerConditions(List<RuleTriggerCondition> triggerConditions) { this.triggerConditions = triggerConditions; }
     public Map<String, String> getContentPayload() { return contentPayload; }

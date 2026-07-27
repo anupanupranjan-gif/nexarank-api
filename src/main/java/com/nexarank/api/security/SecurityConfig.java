@@ -36,6 +36,16 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/health").permitAll()
                 // rule enrichment — public, called by customer search services
                 .requestMatchers("/api/v1/rules/enrich").permitAll()
+                // content enrichment (NR-83) — public, called by customer storefronts
+                .requestMatchers("/api/v1/content/enrich").permitAll()
+                // content rules (NR-84) — same role shape as merch rules
+                .requestMatchers(HttpMethod.GET, "/api/v1/content-rules/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/content-rules/*/submit").hasAnyRole("MERCHANDISER", "APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/content-rules/*/approve").hasAnyRole("APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/content-rules/*/reject").hasAnyRole("APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/v1/content-rules/**").hasAnyRole("MERCHANDISER", "APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/v1/content-rules/**").hasAnyRole("MERCHANDISER", "APPROVER", "ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/content-rules/**").hasAnyRole("APPROVER", "ADMIN")
                 .requestMatchers("/api/v1/clicks").hasAnyRole("INTERNAL", "ADMIN", "MERCHANDISER", "APPROVER", "VIEWER")
                 .requestMatchers("/api/v1/zero-results").hasAnyRole("INTERNAL", "ADMIN")
                 .requestMatchers("/api/v1/search-events").hasAnyRole("INTERNAL", "ADMIN")
