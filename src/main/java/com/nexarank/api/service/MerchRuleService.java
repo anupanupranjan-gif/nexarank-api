@@ -85,6 +85,7 @@ public class MerchRuleService {
     }
 
     public MerchRule createRule(MerchRule rule) {
+        validateRedirectUrl(rule);
         if (rule.getId() == null) rule.setId(UUID.randomUUID().toString());
         if (rule.getTenantId() == null) rule.setTenantId(TenantContext.getTenantId());
         if (rule.getProjectId() == null) rule.setProjectId(TenantContext.getProjectId());
@@ -119,6 +120,7 @@ public class MerchRuleService {
     }
 
     public Optional<MerchRule> updateRule(String id, MerchRule updated) {
+        validateRedirectUrl(updated);
         return repository.findById(id).map(existing -> {
             updated.setId(existing.getId());
             updated.setTenantId(existing.getTenantId());
@@ -496,6 +498,15 @@ public class MerchRuleService {
             }
         } catch (Exception e) {
             log.warn("Failed to serialize transient fields for rule {}: {}", rule.getId(), e.getMessage());
+        }
+    }
+
+    /** NR-88: REDIRECT rules are useless without a real destination — enforced server-side since this is the only path both the UI and any direct API caller go through. */
+    private void validateRedirectUrl(MerchRule rule) {
+        if (rule.getType() != MerchRule.RuleType.REDIRECT) return;
+        String url = rule.getRedirectUrl();
+        if (url == null || url.isBlank() || !(url.startsWith("/") || url.startsWith("https://"))) {
+            throw new IllegalArgumentException("redirectUrl is required for REDIRECT rules and must start with / or https://");
         }
     }
 

@@ -88,13 +88,16 @@ public class MerchRule {
     @Column(name = "source_zero_result_query")
     private String sourceZeroResultQuery;
 
+    @Column(name = "redirect_url")
+    private String redirectUrl;
+
     @Transient
     private List<String> pinnedIds;
 
     @Transient
     private List<String> synonyms;
 
-    public enum RuleType { BOOST, PIN, BURY, SYNONYM }
+    public enum RuleType { BOOST, PIN, BURY, SYNONYM, REDIRECT }
 
     public enum RuleStatus { DRAFT, PENDING_REVIEW, APPROVED, LIVE, REJECTED, DISABLED }
     public enum SynonymDirection { TWO_WAY, ONE_WAY }
@@ -149,6 +152,8 @@ public class MerchRule {
     public void setLastFiredAt(Instant lastFiredAt) { this.lastFiredAt = lastFiredAt; }
     public String getSourceZeroResultQuery() { return sourceZeroResultQuery; }
     public void setSourceZeroResultQuery(String sourceZeroResultQuery) { this.sourceZeroResultQuery = sourceZeroResultQuery; }
+    public String getRedirectUrl() { return redirectUrl; }
+    public void setRedirectUrl(String redirectUrl) { this.redirectUrl = redirectUrl; }
     public List<String> getPinnedIds() { return pinnedIds; }
     public void setPinnedIds(List<String> pinnedIds) { this.pinnedIds = pinnedIds; }
     public List<String> getSynonyms() { return synonyms; }

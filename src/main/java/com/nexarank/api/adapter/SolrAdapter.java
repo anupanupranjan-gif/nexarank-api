@@ -182,6 +182,12 @@ public class SolrAdapter implements SearchEnginePort {
                         appliedRules.add(rule.getId());
                     }
                 }
+                case REDIRECT -> {
+                    if (rule.getRedirectUrl() != null) {
+                        result.setRedirectUrl(rule.getRedirectUrl());
+                        appliedRules.add(rule.getId());
+                    }
+                }
             }
         }
 

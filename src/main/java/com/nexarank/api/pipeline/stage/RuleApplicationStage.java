@@ -221,6 +221,12 @@ public class RuleApplicationStage implements PipelineStage {
                         applied.add(rule.getId());
                     }
                 }
+                case REDIRECT -> {
+                    if (rule.getRedirectUrl() != null) {
+                        result.setRedirectUrl(rule.getRedirectUrl());
+                        applied.add(rule.getId());
+                    }
+                }
             }
         }
         result.setBoosts(boosts);
