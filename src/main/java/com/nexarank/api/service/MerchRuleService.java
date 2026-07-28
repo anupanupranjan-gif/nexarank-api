@@ -402,6 +402,7 @@ public class MerchRuleService {
                 .collect(java.util.stream.Collectors.toList());
 
         List<Map<String, Object>> conflicts = detectConflicts(rule.getQuery());
+        List<Map<String, Object>> duplicateTriggers = findDuplicateTriggers(rule);
 
         Map<String, Object> preview = new java.util.LinkedHashMap<>();
         preview.put("query", rule.getQuery());
@@ -416,9 +417,60 @@ public class MerchRuleService {
             "status", r.getStatus()
         )).collect(java.util.stream.Collectors.toList()));
         preview.put("conflicts", conflicts);
+        preview.put("duplicateTriggers", duplicateTriggers);
         preview.put("willApply", rule.getStatus() == null || rule.getStatus() != MerchRule.RuleStatus.REJECTED);
 
         return preview;
+    }
+
+    /**
+     * NR-106 / ADR-013: soft (non-blocking) duplicate-trigger warning. Finds
+     * other rules of the same type, same query text, and an exactly-matching
+     * set of trigger conditions as the candidate — the ADR's own example is
+     * two merchandisers both writing a rule for the same term. "Other ACTIVE
+     * rules" is interpreted as LIVE + enabled, this codebase's actual
+     * serving state (MerchRule has no separate ACTIVE status — LIVE is the
+     * one that serves traffic, per NR-68), not a hard filter on DRAFT/
+     * PENDING_REVIEW rules that aren't live yet. Never blocks save/submit —
+     * callers just surface the result as a warning.
+     */
+    public List<Map<String, Object>> findDuplicateTriggers(MerchRule candidate) {
+        if (candidate.getType() == null || candidate.getQuery() == null || candidate.getQuery().isBlank()) {
+            return List.of();
+        }
+        String tenantId = TenantContext.getTenantId();
+        String projectId = TenantContext.getProjectId();
+        java.util.Set<String> candidateKeys = conditionKeys(candidate.getTriggerConditions());
+
+        List<MerchRule> others = repository.findByTenantIdAndProjectId(tenantId, projectId).stream()
+                .filter(r -> candidate.getId() == null || !r.getId().equals(candidate.getId()))
+                .filter(r -> r.getStatus() == MerchRule.RuleStatus.LIVE && r.isEnabled())
+                .filter(r -> r.getType() == candidate.getType())
+                .filter(r -> candidate.getQuery().equalsIgnoreCase(r.getQuery()))
+                .toList();
+
+        List<Map<String, Object>> matches = new ArrayList<>();
+        for (MerchRule other : others) {
+            java.util.Set<String> otherKeys = conditionKeys(triggerService.getConditions(other.getId()));
+            if (otherKeys.equals(candidateKeys)) {
+                Map<String, Object> m = new java.util.LinkedHashMap<>();
+                m.put("id", other.getId());
+                m.put("query", other.getQuery());
+                m.put("type", other.getType());
+                m.put("priority", other.getPriority());
+                matches.add(m);
+            }
+        }
+        return matches;
+    }
+
+    private java.util.Set<String> conditionKeys(
+            List<com.nexarank.api.model.RuleTriggerCondition> conditions) {
+        if (conditions == null) return java.util.Set.of();
+        return conditions.stream()
+                .map(c -> c.getFacetField() + "=" + (c.getFacetValues() == null ? "" :
+                        c.getFacetValues().stream().sorted().collect(Collectors.joining(","))))
+                .collect(Collectors.toSet());
     }
 
     

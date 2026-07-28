@@ -7,6 +7,7 @@ import com.nexarank.api.model.MerchRule;
 import com.nexarank.api.model.SearchEngineConfig;
 import com.nexarank.api.pipeline.PipelineContext;
 import com.nexarank.api.pipeline.PipelineStage;
+import com.nexarank.api.pipeline.RuleConflictResolver;
 import com.nexarank.api.port.SearchEnginePort;
 import com.nexarank.api.service.MerchRuleService;
 import com.nexarank.api.service.RuleAbTestService;
@@ -36,15 +37,18 @@ public class RuleApplicationStage implements PipelineStage {
     private final SearchEngineConfigService configService;
     private final SearchEngineAdapterFactory adapterFactory;
     private final RuleAbTestService abTestService;
+    private final RuleConflictResolver conflictResolver;
 
     public RuleApplicationStage(MerchRuleService ruleService,
                                  SearchEngineConfigService configService,
                                  SearchEngineAdapterFactory adapterFactory,
-                                 RuleAbTestService abTestService) {
+                                 RuleAbTestService abTestService,
+                                 RuleConflictResolver conflictResolver) {
         this.ruleService   = ruleService;
         this.configService = configService;
         this.adapterFactory = adapterFactory;
         this.abTestService  = abTestService;
+        this.conflictResolver = conflictResolver;
     }
 
     @Override public String name()        { return "RULE_APPLICATION"; }
@@ -97,6 +101,11 @@ public class RuleApplicationStage implements PipelineStage {
             } else {
                 rules = allRules;
             }
+
+            // NR-106 / ADR-013: priority-based conflict resolution — when two
+            // or more matched rules produce a conflicting instruction on the
+            // same target, only the higher-priority one survives.
+            rules = conflictResolver.resolve(rules);
 
             context.setMatchedRules(rules);
 
