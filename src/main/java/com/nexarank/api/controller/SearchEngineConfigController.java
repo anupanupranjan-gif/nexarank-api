@@ -7,6 +7,7 @@ import com.nexarank.api.service.SearchEngineConfigService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -66,7 +67,7 @@ public class SearchEngineConfigController {
     public ResponseEntity<List<SearchField>> getFields() {
         List<SearchField> fields = service.getFields();
         if (fields.isEmpty()) {
-            return ResponseEntity.noContent().build();
+            return ResponseEntity.ok(Collections.emptyList());
         }
         return ResponseEntity.ok(fields);
     }
