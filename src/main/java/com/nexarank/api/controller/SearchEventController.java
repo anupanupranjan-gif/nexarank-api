@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 package com.nexarank.api.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexarank.api.model.SearchEvent;
 import com.nexarank.api.repository.SearchEventRepository;
 import com.nexarank.api.security.TenantContext;
@@ -17,6 +18,7 @@ import java.util.UUID;
 public class SearchEventController {
 
     private final SearchEventRepository repository;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public SearchEventController(SearchEventRepository repository) {
         this.repository = repository;
@@ -36,6 +38,16 @@ public class SearchEventController {
         event.setTookMs(body.get("tookMs") != null
                 ? ((Number) body.get("tookMs")).intValue() : null);
         event.setSearchedAt(Instant.now());
+        // NR-36: facet usage reporting — persist whichever facets were
+        // selected on this search, if any were sent.
+        Object selectedFacets = body.get("selectedFacets");
+        if (selectedFacets instanceof Map<?, ?> facetsMap && !facetsMap.isEmpty()) {
+            try {
+                event.setSelectedFacetsJson(objectMapper.writeValueAsString(facetsMap));
+            } catch (Exception ignored) {
+                // best-effort — malformed facets payload shouldn't block search event ingestion
+            }
+        }
         repository.save(event);
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", event.getId()));
     }

@@ -35,6 +35,12 @@ public class SearchEvent {
     @Column(name = "searched_at")
     private Instant searchedAt = Instant.now();
 
+    @Column(name = "selected_facets", columnDefinition = "TEXT")
+    private String selectedFacetsJson;
+
+    @Transient
+    private java.util.Map<String, String> selectedFacets;
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getTenantId() { return tenantId; }
@@ -53,4 +59,8 @@ public class SearchEvent {
     public void setTookMs(Integer tookMs) { this.tookMs = tookMs; }
     public Instant getSearchedAt() { return searchedAt; }
     public void setSearchedAt(Instant searchedAt) { this.searchedAt = searchedAt; }
+    public String getSelectedFacetsJson() { return selectedFacetsJson; }
+    public void setSelectedFacetsJson(String selectedFacetsJson) { this.selectedFacetsJson = selectedFacetsJson; }
+    public java.util.Map<String, String> getSelectedFacets() { return selectedFacets; }
+    public void setSelectedFacets(java.util.Map<String, String> selectedFacets) { this.selectedFacets = selectedFacets; }
 }

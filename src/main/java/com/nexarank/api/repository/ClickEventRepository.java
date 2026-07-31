@@ -52,4 +52,17 @@ public interface ClickEventRepository extends JpaRepository<ClickEvent, String> 
             @Param("projectId") String projectId,
             @Param("sessionId") String sessionId,
             @Param("since") Instant since);
+
+    /**
+     * NR-36: facet usage reporting — session-level click-rate approximation.
+     * A facet value's "click rate" is the share of sessions that selected it
+     * and also clicked something, same directional-approximation spirit as
+     * the existing query-level rule-performance CTR (no exact per-click
+     * facet attribution exists).
+     */
+    @Query("SELECT DISTINCT c.sessionId FROM ClickEvent c WHERE c.tenantId = :tenantId " +
+           "AND c.projectId = :projectId AND c.clickedAt >= :since AND c.sessionId IS NOT NULL")
+    List<String> findDistinctSessionIdsWithClicks(@Param("tenantId") String tenantId,
+                                                   @Param("projectId") String projectId,
+                                                   @Param("since") Instant since);
 }

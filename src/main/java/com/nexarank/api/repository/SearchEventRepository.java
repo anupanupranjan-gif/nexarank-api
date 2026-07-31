@@ -69,6 +69,17 @@ public interface SearchEventRepository extends JpaRepository<SearchEvent, String
     List<ProjectVolumeRow> findVolumeByProject(@Param("tenantId") String tenantId,
                                                 @Param("since") Instant since);
 
+    /**
+     * NR-36: facet usage reporting — every search event in the window that
+     * had at least one facet selected. Returns full entities (not a
+     * projection) since callers need selectedFacetsJson deserialized anyway.
+     */
+    @Query("SELECT s FROM SearchEvent s WHERE s.tenantId = :tenantId AND s.projectId = :projectId " +
+           "AND s.searchedAt >= :since AND s.selectedFacetsJson IS NOT NULL AND s.selectedFacetsJson <> ''")
+    List<SearchEvent> findWithSelectedFacets(@Param("tenantId") String tenantId,
+                                              @Param("projectId") String projectId,
+                                              @Param("since") Instant since);
+
     interface LatencyPercentiles {
         Double getP50();
         Double getP95();

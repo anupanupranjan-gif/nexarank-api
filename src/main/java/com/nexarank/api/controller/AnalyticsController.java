@@ -1,8 +1,12 @@
 // Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 package com.nexarank.api.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nexarank.api.model.FacetConfig;
 import com.nexarank.api.model.Project;
+import com.nexarank.api.model.SearchEvent;
 import com.nexarank.api.repository.ClickEventRepository;
+import com.nexarank.api.repository.FacetConfigRepository;
 import com.nexarank.api.repository.MerchRuleRepository;
 import com.nexarank.api.repository.ProjectRepository;
 import com.nexarank.api.repository.ZeroResultQueryRepository;
@@ -28,19 +32,23 @@ public class AnalyticsController {
     private final QualityEvalResultRepository qualityResultRepository;
     private final SearchEventRepository searchEventRepository;
     private final ProjectRepository projectRepository;
+    private final FacetConfigRepository facetConfigRepository;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public AnalyticsController(ClickEventRepository clickEventRepository,
                                 MerchRuleRepository merchRuleRepository,
                                 ZeroResultQueryRepository zeroResultRepository,
                                 QualityEvalResultRepository qualityResultRepository,
                                 SearchEventRepository searchEventRepository,
-                                ProjectRepository projectRepository) {
+                                ProjectRepository projectRepository,
+                                FacetConfigRepository facetConfigRepository) {
         this.clickEventRepository = clickEventRepository;
         this.merchRuleRepository = merchRuleRepository;
         this.zeroResultRepository = zeroResultRepository;
         this.qualityResultRepository = qualityResultRepository;
         this.searchEventRepository = searchEventRepository;
         this.projectRepository = projectRepository;
+        this.facetConfigRepository = facetConfigRepository;
     }
 
     @GetMapping("/overview")
@@ -257,6 +265,100 @@ public class AnalyticsController {
         response.put("periodDays", days);
         response.put("latency", latency);
         response.put("projectVolume", projectVolume);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * NR-36: facet usage report — value selection frequency and a session-
+     * level click-rate approximation per facet value, plus which configured
+     * facets went unused this period. Depends on SearchEvent.selectedFacets
+     * actually being populated, which requires search-api to send it and
+     * search-ui to actually forward non-brand/category facet picks (both
+     * fixed as part of this same change — see search-api/search-ui commits).
+     */
+    @GetMapping("/facet-usage")
+    public ResponseEntity<?> getFacetUsage(@RequestParam(defaultValue = "30") int days) {
+        String tenantId = TenantContext.getTenantId();
+        String projectId = TenantContext.getProjectId();
+        Instant since = Instant.now().minus(days, ChronoUnit.DAYS);
+
+        List<FacetConfig> configuredFacets = facetConfigRepository
+                .findByTenantIdAndProjectIdOrderBySortOrderAsc(tenantId, projectId);
+
+        List<SearchEvent> eventsWithFacets = searchEventRepository
+                .findWithSelectedFacets(tenantId, projectId, since);
+
+        Set<String> sessionsWithClicks = new HashSet<>(
+                clickEventRepository.findDistinctSessionIdsWithClicks(tenantId, projectId, since));
+
+        // fieldName -> value -> (occurrence count, distinct sessions that selected it)
+        Map<String, Map<String, Long>> selectionCounts = new LinkedHashMap<>();
+        Map<String, Map<String, Set<String>>> selectionSessions = new LinkedHashMap<>();
+
+        for (SearchEvent event : eventsWithFacets) {
+            Map<String, String> facets;
+            try {
+                facets = objectMapper.readValue(event.getSelectedFacetsJson(),
+                        new com.fasterxml.jackson.core.type.TypeReference<Map<String, String>>() {});
+            } catch (Exception e) {
+                continue;
+            }
+            for (Map.Entry<String, String> entry : facets.entrySet()) {
+                String field = entry.getKey();
+                String value = entry.getValue();
+                selectionCounts.computeIfAbsent(field, k -> new LinkedHashMap<>())
+                        .merge(value, 1L, Long::sum);
+                selectionSessions.computeIfAbsent(field, k -> new LinkedHashMap<>())
+                        .computeIfAbsent(value, k -> new HashSet<>())
+                        .add(event.getSessionId());
+            }
+        }
+
+        List<Map<String, Object>> facetReport = new ArrayList<>();
+        List<Map<String, Object>> unusedFacets = new ArrayList<>();
+
+        for (FacetConfig fc : configuredFacets) {
+            Map<String, Long> values = selectionCounts.getOrDefault(fc.getFieldName(), Map.of());
+            Map<String, Set<String>> sessionsByValue = selectionSessions.getOrDefault(fc.getFieldName(), Map.of());
+
+            List<Map<String, Object>> topValues = values.entrySet().stream()
+                    .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                    .limit(10)
+                    .map(e -> {
+                        Set<String> sessions = sessionsByValue.getOrDefault(e.getKey(), Set.of());
+                        long sessionsWithClick = sessions.stream()
+                                .filter(sessionsWithClicks::contains).count();
+                        Map<String, Object> v = new LinkedHashMap<>();
+                        v.put("value", e.getKey());
+                        v.put("selections", e.getValue());
+                        v.put("clickRate", sessions.isEmpty() ? 0.0
+                                : Math.round((double) sessionsWithClick / sessions.size() * 1000.0) / 1000.0);
+                        return v;
+                    })
+                    .collect(Collectors.toList());
+
+            long totalSelections = values.values().stream().mapToLong(Long::longValue).sum();
+
+            Map<String, Object> facetRow = new LinkedHashMap<>();
+            facetRow.put("fieldName", fc.getFieldName());
+            facetRow.put("displayLabel", fc.getDisplayLabel() != null ? fc.getDisplayLabel() : fc.getFieldName());
+            facetRow.put("enabled", fc.isEnabled());
+            facetRow.put("totalSelections", totalSelections);
+            facetRow.put("topValues", topValues);
+            facetReport.add(facetRow);
+
+            if (fc.isEnabled() && totalSelections == 0) {
+                Map<String, Object> unused = new LinkedHashMap<>();
+                unused.put("fieldName", fc.getFieldName());
+                unused.put("displayLabel", fc.getDisplayLabel() != null ? fc.getDisplayLabel() : fc.getFieldName());
+                unusedFacets.add(unused);
+            }
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("periodDays", days);
+        response.put("facets", facetReport);
+        response.put("unusedFacets", unusedFacets);
         return ResponseEntity.ok(response);
     }
 
