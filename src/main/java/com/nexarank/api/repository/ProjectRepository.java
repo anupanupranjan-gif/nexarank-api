@@ -9,4 +9,7 @@ import java.util.Optional;
 public interface ProjectRepository extends JpaRepository<Project, String> {
     List<Project> findByTenantIdAndEnabled(String tenantId, boolean enabled);
     Optional<Project> findByTenantIdAndId(String tenantId, String id);
+
+    /** NR-36: all projects regardless of enabled state, for labeling per-project reporting rows. */
+    List<Project> findByTenantId(String tenantId);
 }

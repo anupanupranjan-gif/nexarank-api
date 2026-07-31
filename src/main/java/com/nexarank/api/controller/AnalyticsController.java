@@ -1,8 +1,10 @@
 // Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 package com.nexarank.api.controller;
 
+import com.nexarank.api.model.Project;
 import com.nexarank.api.repository.ClickEventRepository;
 import com.nexarank.api.repository.MerchRuleRepository;
+import com.nexarank.api.repository.ProjectRepository;
 import com.nexarank.api.repository.ZeroResultQueryRepository;
 import com.nexarank.api.repository.SearchEventRepository;
 import com.nexarank.api.repository.QualityEvalResultRepository;
@@ -25,17 +27,20 @@ public class AnalyticsController {
     private final ZeroResultQueryRepository zeroResultRepository;
     private final QualityEvalResultRepository qualityResultRepository;
     private final SearchEventRepository searchEventRepository;
+    private final ProjectRepository projectRepository;
 
     public AnalyticsController(ClickEventRepository clickEventRepository,
                                 MerchRuleRepository merchRuleRepository,
                                 ZeroResultQueryRepository zeroResultRepository,
                                 QualityEvalResultRepository qualityResultRepository,
-                                SearchEventRepository searchEventRepository) {
+                                SearchEventRepository searchEventRepository,
+                                ProjectRepository projectRepository) {
         this.clickEventRepository = clickEventRepository;
         this.merchRuleRepository = merchRuleRepository;
         this.zeroResultRepository = zeroResultRepository;
         this.qualityResultRepository = qualityResultRepository;
         this.searchEventRepository = searchEventRepository;
+        this.projectRepository = projectRepository;
     }
 
     @GetMapping("/overview")
@@ -205,6 +210,54 @@ public class AnalyticsController {
         }
 
         return ResponseEntity.ok(trends);
+    }
+
+    /**
+     * NR-36: search health report — latency percentiles (current project)
+     * and search volume/zero-result rate broken out across every project
+     * in the tenant. Zero-result trend over time is already covered by
+     * /trends, so it isn't duplicated here.
+     */
+    @GetMapping("/search-health")
+    public ResponseEntity<?> getSearchHealth(@RequestParam(defaultValue = "30") int days) {
+        String tenantId = TenantContext.getTenantId();
+        String projectId = TenantContext.getProjectId();
+        Instant since = Instant.now().minus(days, ChronoUnit.DAYS);
+
+        SearchEventRepository.LatencyPercentiles lp =
+                searchEventRepository.findLatencyPercentiles(tenantId, projectId, since);
+        Map<String, Object> latency = new LinkedHashMap<>();
+        latency.put("p50", lp.getP50() != null ? Math.round(lp.getP50()) : null);
+        latency.put("p95", lp.getP95() != null ? Math.round(lp.getP95()) : null);
+        latency.put("p99", lp.getP99() != null ? Math.round(lp.getP99()) : null);
+        latency.put("avgMs", lp.getAvgMs() != null ? Math.round(lp.getAvgMs()) : null);
+        latency.put("sampleSize", lp.getSampleSize());
+
+        Map<String, String> projectNames = projectRepository.findByTenantId(tenantId).stream()
+                .collect(Collectors.toMap(Project::getId, Project::getName));
+
+        List<Map<String, Object>> projectVolume = searchEventRepository
+                .findVolumeByProject(tenantId, since).stream()
+                .map(row -> {
+                    long searches = row.getSearches();
+                    long zeroResults = row.getZeroResults() != null ? row.getZeroResults() : 0;
+                    Map<String, Object> p = new LinkedHashMap<>();
+                    p.put("projectId", row.getProjectId());
+                    p.put("projectName", projectNames.getOrDefault(row.getProjectId(), row.getProjectId()));
+                    p.put("searches", searches);
+                    p.put("zeroResults", zeroResults);
+                    p.put("zeroResultRate", searches > 0
+                            ? Math.round((double) zeroResults / searches * 1000.0) / 1000.0 : 0.0);
+                    return p;
+                })
+                .sorted((a, b) -> Long.compare((long) b.get("searches"), (long) a.get("searches")))
+                .collect(Collectors.toList());
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("periodDays", days);
+        response.put("latency", latency);
+        response.put("projectVolume", projectVolume);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/rules-performance")
