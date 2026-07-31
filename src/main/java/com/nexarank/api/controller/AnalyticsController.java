@@ -13,6 +13,9 @@ import com.nexarank.api.repository.ZeroResultQueryRepository;
 import com.nexarank.api.repository.SearchEventRepository;
 import com.nexarank.api.repository.QualityEvalResultRepository;
 import com.nexarank.api.security.TenantContext;
+import com.nexarank.api.service.AnalyticsPdfService;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -33,6 +36,7 @@ public class AnalyticsController {
     private final SearchEventRepository searchEventRepository;
     private final ProjectRepository projectRepository;
     private final FacetConfigRepository facetConfigRepository;
+    private final AnalyticsPdfService pdfService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public AnalyticsController(ClickEventRepository clickEventRepository,
@@ -41,7 +45,8 @@ public class AnalyticsController {
                                 QualityEvalResultRepository qualityResultRepository,
                                 SearchEventRepository searchEventRepository,
                                 ProjectRepository projectRepository,
-                                FacetConfigRepository facetConfigRepository) {
+                                FacetConfigRepository facetConfigRepository,
+                                AnalyticsPdfService pdfService) {
         this.clickEventRepository = clickEventRepository;
         this.merchRuleRepository = merchRuleRepository;
         this.zeroResultRepository = zeroResultRepository;
@@ -49,10 +54,15 @@ public class AnalyticsController {
         this.searchEventRepository = searchEventRepository;
         this.projectRepository = projectRepository;
         this.facetConfigRepository = facetConfigRepository;
+        this.pdfService = pdfService;
     }
 
     @GetMapping("/overview")
     public ResponseEntity<?> getOverview(@RequestParam(defaultValue = "30") int days) {
+        return ResponseEntity.ok(buildOverview(days));
+    }
+
+    private Map<String, Object> buildOverview(int days) {
         String tenantId = TenantContext.getTenantId();
         String projectId = TenantContext.getProjectId();
         Instant since = Instant.now().minus(days, ChronoUnit.DAYS);
@@ -180,7 +190,7 @@ public class AnalyticsController {
         overview.put("latestQualityRunAt", latestQuality.map(q -> q.getRunAt()).orElse(null));
         overview.put("periodDays", days);
 
-        return ResponseEntity.ok(overview);
+        return overview;
     }
 
 
@@ -228,6 +238,10 @@ public class AnalyticsController {
      */
     @GetMapping("/search-health")
     public ResponseEntity<?> getSearchHealth(@RequestParam(defaultValue = "30") int days) {
+        return ResponseEntity.ok(buildSearchHealth(days));
+    }
+
+    private Map<String, Object> buildSearchHealth(int days) {
         String tenantId = TenantContext.getTenantId();
         String projectId = TenantContext.getProjectId();
         Instant since = Instant.now().minus(days, ChronoUnit.DAYS);
@@ -265,7 +279,7 @@ public class AnalyticsController {
         response.put("periodDays", days);
         response.put("latency", latency);
         response.put("projectVolume", projectVolume);
-        return ResponseEntity.ok(response);
+        return response;
     }
 
     /**
@@ -278,6 +292,10 @@ public class AnalyticsController {
      */
     @GetMapping("/facet-usage")
     public ResponseEntity<?> getFacetUsage(@RequestParam(defaultValue = "30") int days) {
+        return ResponseEntity.ok(buildFacetUsage(days));
+    }
+
+    private Map<String, Object> buildFacetUsage(int days) {
         String tenantId = TenantContext.getTenantId();
         String projectId = TenantContext.getProjectId();
         Instant since = Instant.now().minus(days, ChronoUnit.DAYS);
@@ -359,11 +377,15 @@ public class AnalyticsController {
         response.put("periodDays", days);
         response.put("facets", facetReport);
         response.put("unusedFacets", unusedFacets);
-        return ResponseEntity.ok(response);
+        return response;
     }
 
     @GetMapping("/rules-performance")
     public ResponseEntity<?> getRulesPerformance(@RequestParam(defaultValue = "30") int days) {
+        return ResponseEntity.ok(buildRulesPerformance(days));
+    }
+
+    private Map<String, Object> buildRulesPerformance(int days) {
         String tenantId = TenantContext.getTenantId();
         String projectId = TenantContext.getProjectId();
         Instant since = Instant.now().minus(days, ChronoUnit.DAYS);
@@ -425,7 +447,34 @@ public class AnalyticsController {
         response.put("avgCtr", Math.round(avgCtr * 1000.0) / 1000.0);
         response.put("periodDays", days);
 
-        return ResponseEntity.ok(response);
+        return response;
+    }
+
+    /**
+     * NR-36: consolidated "send to leadership" PDF — overview, search
+     * health, facet usage, and rule performance, in one document. Chosen
+     * over separate per-section CSV/Excel exports (the ticket's literal
+     * text) since the actual use case is a polished snapshot to hand to
+     * someone with no dashboard access (e.g. a STAKEHOLDER-role recipient,
+     * NR-67), not raw data to keep manipulating — a deliberate scope
+     * decision, not an oversight.
+     */
+    @GetMapping(value = "/report.pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> getReportPdf(@RequestParam(defaultValue = "30") int days) {
+        Map<String, Object> overview = buildOverview(days);
+        Map<String, Object> searchHealth = buildSearchHealth(days);
+        Map<String, Object> facetUsage = buildFacetUsage(days);
+        Map<String, Object> rulesPerformance = buildRulesPerformance(days);
+
+        byte[] pdf = pdfService.generateReport(
+                TenantContext.getTenantId(), TenantContext.getProjectId(), days,
+                overview, searchHealth, facetUsage, rulesPerformance);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"nexarank-analytics-report.pdf\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdf);
     }
 
     private boolean queryMatchesRule(String searchedQuery, String ruleQuery) {

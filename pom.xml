@@ -84,6 +84,13 @@
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- NR-36: PDF analytics report export. Apache 2.0 licensed, matching
+         this project's own license (unlike iText, which is AGPL/commercial). -->
+    <dependency>
+      <groupId>org.apache.pdfbox</groupId>
+      <artifactId>pdfbox</artifactId>
+      <version>3.0.3</version>
+    </dependency>
   </dependencies>
   <build>
     <plugins>
