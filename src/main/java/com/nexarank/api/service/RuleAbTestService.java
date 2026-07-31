@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -94,6 +95,72 @@ public class RuleAbTestService {
     public List<RuleAbTest> getAllTests() {
         return repository.findByTenantIdAndProjectId(
                 TenantContext.getTenantId(), TenantContext.getProjectId());
+    }
+
+    /**
+     * NR-119: same as getAllTests(), but each row carries a ruleA/ruleB
+     * summary (type/query/status/enabled/actionSummary) so the A/B Tests
+     * page can show which rule each variant actually is without a second
+     * per-row lookup. Batches both rules' ids across all tests into one
+     * MerchRuleService.getByIds call rather than one fetch per row.
+     */
+    public List<AbTestView> getAllTestsEnriched() {
+        List<RuleAbTest> tests = getAllTests();
+        java.util.Set<String> ruleIds = new java.util.LinkedHashSet<>();
+        for (RuleAbTest t : tests) {
+            ruleIds.add(t.getRuleAId());
+            ruleIds.add(t.getRuleBId());
+        }
+        Map<String, MerchRule> rulesById = ruleService.getByIds(new java.util.ArrayList<>(ruleIds));
+        return tests.stream()
+                .map(t -> new AbTestView(t,
+                        toSummary(rulesById.get(t.getRuleAId())),
+                        toSummary(rulesById.get(t.getRuleBId()))))
+                .toList();
+    }
+
+    private RuleSummary toSummary(MerchRule rule) {
+        if (rule == null) return null;
+        return new RuleSummary(rule.getId(), rule.getType().name(), rule.getQuery(),
+                rule.getStatus().name(), rule.isEnabled(), actionSummary(rule));
+    }
+
+    /** One-line "TYPE + key action" preview, e.g. "BOOST brand=Duralast ×1.5". */
+    private String actionSummary(MerchRule rule) {
+        return switch (rule.getType()) {
+            case BOOST, BURY -> rule.getType() + " " + rule.getBoostField() + "=" + rule.getBoostValue()
+                    + (rule.getBoostFactor() != null ? " ×" + rule.getBoostFactor() : "");
+            case PIN -> "PIN " + (rule.getPinnedIds() != null ? String.join(", ", rule.getPinnedIds()) : "");
+            case SYNONYM -> "SYNONYM " + (rule.getSynonymDirection() == MerchRule.SynonymDirection.ONE_WAY ? "→" : "↔")
+                    + " " + (rule.getSynonyms() != null ? String.join(", ", rule.getSynonyms()) : "");
+            case REDIRECT -> "REDIRECT → " + rule.getRedirectUrl();
+        };
+    }
+
+    public record RuleSummary(String id, String type, String query, String status,
+                               boolean enabled, String actionSummary) {}
+
+    /**
+     * Wraps a RuleAbTest with its two rule summaries. @JsonUnwrapped keeps
+     * every existing RuleAbTest field (including computed ctrA/ctrB/
+     * significant/leadingVariant) at the top level of the JSON, so this is
+     * purely additive for any consumer already reading the raw fields.
+     */
+    public static class AbTestView {
+        private final RuleAbTest test;
+        private final RuleSummary ruleA;
+        private final RuleSummary ruleB;
+
+        public AbTestView(RuleAbTest test, RuleSummary ruleA, RuleSummary ruleB) {
+            this.test = test;
+            this.ruleA = ruleA;
+            this.ruleB = ruleB;
+        }
+
+        @com.fasterxml.jackson.annotation.JsonUnwrapped
+        public RuleAbTest getTest() { return test; }
+        public RuleSummary getRuleA() { return ruleA; }
+        public RuleSummary getRuleB() { return ruleB; }
     }
 
     public List<RuleAbTest> getRunningTests() {

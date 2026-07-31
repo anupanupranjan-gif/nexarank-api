@@ -31,8 +31,8 @@ public class RuleAbTestController {
     }
 
     @GetMapping
-    public ResponseEntity<List<RuleAbTest>> getAllTests() {
-        return ResponseEntity.ok(abTestService.getAllTests());
+    public ResponseEntity<List<RuleAbTestService.AbTestView>> getAllTests() {
+        return ResponseEntity.ok(abTestService.getAllTestsEnriched());
     }
 
     @GetMapping("/running")

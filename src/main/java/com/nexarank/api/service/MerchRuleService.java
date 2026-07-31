@@ -119,6 +119,20 @@ public class MerchRuleService {
         });
     }
 
+    /**
+     * NR-119: batch fetch for enrichment (e.g. A/B test rule summaries) — a
+     * plain findAllById, so DISABLED rules are still returned (they're never
+     * deleted, only disabled — see RuleAbTestService.promoteWinner). Trigger
+     * conditions aren't loaded since callers only need type/query/action for
+     * a one-line summary, not the full edit-form shape.
+     */
+    public Map<String, MerchRule> getByIds(List<String> ids) {
+        if (ids == null || ids.isEmpty()) return Map.of();
+        List<MerchRule> found = repository.findAllById(ids);
+        found.forEach(this::deserializeTransientFields);
+        return found.stream().collect(Collectors.toMap(MerchRule::getId, r -> r));
+    }
+
     public Optional<MerchRule> updateRule(String id, MerchRule updated) {
         validateRedirectUrl(updated);
         return repository.findById(id).map(existing -> {
