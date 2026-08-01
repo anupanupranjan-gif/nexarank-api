@@ -64,6 +64,8 @@ nexarank:
   report:
     from: modernreliability@gmail.com
     cron: "0 0 8 * * MON"
+  monthly-report:
+    cron: "0 0 8 1 * *"
 
 ollama:
   base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
