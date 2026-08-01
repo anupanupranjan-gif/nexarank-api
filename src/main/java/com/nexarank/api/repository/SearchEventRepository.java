@@ -28,6 +28,10 @@ public interface SearchEventRepository extends JpaRepository<SearchEvent, String
     boolean existsByTenantIdAndProjectIdAndQueryIgnoreCaseAndResultCountGreaterThanAndSearchedAtAfter(
             String tenantId, String projectId, String query, int resultCount, Instant since);
 
+    /** NR-36: existsBy...SearchedAtAfter with an explicit upper bound for custom date ranges. */
+    boolean existsByTenantIdAndProjectIdAndQueryIgnoreCaseAndResultCountGreaterThanAndSearchedAtBetween(
+            String tenantId, String projectId, String query, int resultCount, Instant start, Instant end);
+
     @Query("SELECT AVG(s.tookMs) FROM SearchEvent s WHERE s.tenantId = :tenantId " +
            "AND s.projectId = :projectId AND s.searchedAt >= :start AND s.searchedAt < :end " +
            "AND s.tookMs IS NOT NULL")
@@ -54,6 +58,22 @@ public interface SearchEventRepository extends JpaRepository<SearchEvent, String
                                                @Param("projectId") String projectId,
                                                @Param("since") Instant since);
 
+    /** NR-36: findLatencyPercentiles with an explicit upper bound for custom date ranges. */
+    @Query(value = "SELECT " +
+            "PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY took_ms) AS p50, " +
+            "PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY took_ms) AS p95, " +
+            "PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY took_ms) AS p99, " +
+            "AVG(took_ms) AS \"avgMs\", " +
+            "COUNT(took_ms) AS \"sampleSize\" " +
+            "FROM search_events " +
+            "WHERE tenant_id = :tenantId AND project_id = :projectId " +
+            "AND searched_at >= :start AND searched_at < :end AND took_ms IS NOT NULL",
+            nativeQuery = true)
+    LatencyPercentiles findLatencyPercentilesBetween(@Param("tenantId") String tenantId,
+                                                       @Param("projectId") String projectId,
+                                                       @Param("start") Instant start,
+                                                       @Param("end") Instant end);
+
     /**
      * NR-36: search volume + zero-result count per project, across every
      * project in the tenant (unlike every other query here, deliberately
@@ -69,6 +89,17 @@ public interface SearchEventRepository extends JpaRepository<SearchEvent, String
     List<ProjectVolumeRow> findVolumeByProject(@Param("tenantId") String tenantId,
                                                 @Param("since") Instant since);
 
+    /** NR-36: findVolumeByProject with an explicit upper bound for custom date ranges. */
+    @Query(value = "SELECT project_id AS \"projectId\", COUNT(*) AS searches, " +
+            "SUM(CASE WHEN result_count = 0 THEN 1 ELSE 0 END) AS \"zeroResults\" " +
+            "FROM search_events " +
+            "WHERE tenant_id = :tenantId AND searched_at >= :start AND searched_at < :end " +
+            "GROUP BY project_id",
+            nativeQuery = true)
+    List<ProjectVolumeRow> findVolumeByProjectBetween(@Param("tenantId") String tenantId,
+                                                        @Param("start") Instant start,
+                                                        @Param("end") Instant end);
+
     /**
      * NR-36: facet usage reporting — every search event in the window that
      * had at least one facet selected. Returns full entities (not a
@@ -79,6 +110,15 @@ public interface SearchEventRepository extends JpaRepository<SearchEvent, String
     List<SearchEvent> findWithSelectedFacets(@Param("tenantId") String tenantId,
                                               @Param("projectId") String projectId,
                                               @Param("since") Instant since);
+
+    /** NR-36: findWithSelectedFacets with an explicit upper bound for custom date ranges. */
+    @Query("SELECT s FROM SearchEvent s WHERE s.tenantId = :tenantId AND s.projectId = :projectId " +
+           "AND s.searchedAt >= :start AND s.searchedAt < :end " +
+           "AND s.selectedFacetsJson IS NOT NULL AND s.selectedFacetsJson <> ''")
+    List<SearchEvent> findWithSelectedFacetsBetween(@Param("tenantId") String tenantId,
+                                                      @Param("projectId") String projectId,
+                                                      @Param("start") Instant start,
+                                                      @Param("end") Instant end);
 
     interface LatencyPercentiles {
         Double getP50();

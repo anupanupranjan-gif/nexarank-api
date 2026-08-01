@@ -18,6 +18,16 @@ public interface ZeroResultQueryRepository extends JpaRepository<ZeroResultQuery
                                              @Param("projectId") String projectId,
                                              @Param("since") Instant since);
 
+    /** NR-36: findTopZeroResultQueries with an explicit upper bound for custom date ranges. */
+    @Query("SELECT z.query, COUNT(z) as occurrences FROM ZeroResultQuery z " +
+           "WHERE z.tenantId = :tenantId AND z.projectId = :projectId " +
+           "AND z.occurredAt >= :start AND z.occurredAt < :end " +
+           "GROUP BY z.query ORDER BY occurrences DESC")
+    List<Object[]> findTopZeroResultQueriesBetween(@Param("tenantId") String tenantId,
+                                                    @Param("projectId") String projectId,
+                                                    @Param("start") Instant start,
+                                                    @Param("end") Instant end);
+
     long countByTenantIdAndProjectIdAndOccurredAtAfter(
             String tenantId, String projectId, Instant since);
 

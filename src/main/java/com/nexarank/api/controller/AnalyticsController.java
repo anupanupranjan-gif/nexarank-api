@@ -17,12 +17,16 @@ import com.nexarank.api.service.AnalyticsPdfService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
-import java.time.temporal.ChronoUnit;
 import java.util.stream.Collectors;
 
 @RestController
@@ -57,17 +61,82 @@ public class AnalyticsController {
         this.pdfService = pdfService;
     }
 
-    @GetMapping("/overview")
-    public ResponseEntity<?> getOverview(@RequestParam(defaultValue = "30") int days) {
-        return ResponseEntity.ok(buildOverview(days));
+    /** NR-36: resolved reporting window — either startDate/endDate (inclusive, whole days) or the last N days from now. */
+    private record Window(Instant since, Instant until) {}
+
+    private Window resolveWindow(int days, String startDate, String endDate) {
+        boolean hasStart = startDate != null && !startDate.isBlank();
+        boolean hasEnd = endDate != null && !endDate.isBlank();
+        if (hasStart != hasEnd) {
+            throw new IllegalArgumentException("startDate and endDate must be provided together");
+        }
+        if (!hasStart) {
+            Instant until = Instant.now();
+            return new Window(until.minus(days, ChronoUnit.DAYS), until);
+        }
+        LocalDate start, end;
+        try {
+            start = LocalDate.parse(startDate);
+            end = LocalDate.parse(endDate);
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException("startDate/endDate must be ISO dates (YYYY-MM-DD)");
+        }
+        if (end.isBefore(start)) {
+            throw new IllegalArgumentException("endDate must not be before startDate");
+        }
+        // endDate is inclusive of the whole day, so the exclusive upper bound is the day after.
+        return new Window(start.atStartOfDay(ZoneOffset.UTC).toInstant(),
+                end.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant());
     }
 
-    private Map<String, Object> buildOverview(int days) {
-        String tenantId = TenantContext.getTenantId();
-        String projectId = TenantContext.getProjectId();
-        Instant since = Instant.now().minus(days, ChronoUnit.DAYS);
+    /**
+     * NR-36: lets an ADMIN/TENANT_ADMIN/SUPER_ADMIN view another project's analytics
+     * within their own tenant (never cross-tenant). Every other caller stays scoped
+     * to their JWT's own project, same as before this existed.
+     */
+    private String resolveProjectId(String requestedProjectId) {
+        if (requestedProjectId == null || requestedProjectId.isBlank()) {
+            return TenantContext.getProjectId();
+        }
+        if (!isAdmin()) {
+            throw new AccessDeniedException("Only ADMIN/TENANT_ADMIN may view another project's analytics");
+        }
+        projectRepository.findByTenantIdAndId(TenantContext.getTenantId(), requestedProjectId)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown project: " + requestedProjectId));
+        return requestedProjectId;
+    }
 
-        List<Object[]> queryStats = clickEventRepository.findQueryStats(tenantId, projectId, since);
+    private boolean isAdmin() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return false;
+        return auth.getAuthorities().stream().anyMatch(a ->
+                a.getAuthority().equals("ROLE_ADMIN")
+                        || a.getAuthority().equals("ROLE_TENANT_ADMIN")
+                        || a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+    }
+
+    private void addWindowMeta(Map<String, Object> response, Window window, String projectId) {
+        response.put("projectId", projectId);
+        response.put("startDate", LocalDate.ofInstant(window.since(), ZoneOffset.UTC).toString());
+        response.put("endDate", LocalDate.ofInstant(window.until().minusSeconds(1), ZoneOffset.UTC).toString());
+    }
+
+    @GetMapping("/overview")
+    public ResponseEntity<?> getOverview(@RequestParam(defaultValue = "30") int days,
+                                          @RequestParam(required = false) String startDate,
+                                          @RequestParam(required = false) String endDate,
+                                          @RequestParam(required = false) String projectId) {
+        return ResponseEntity.ok(buildOverview(days, startDate, endDate, projectId));
+    }
+
+    private Map<String, Object> buildOverview(int days, String startDate, String endDate, String requestedProjectId) {
+        String tenantId = TenantContext.getTenantId();
+        String projectId = resolveProjectId(requestedProjectId);
+        Window window = resolveWindow(days, startDate, endDate);
+        Instant since = window.since();
+        Instant until = window.until();
+
+        List<Object[]> queryStats = clickEventRepository.findQueryStatsBetween(tenantId, projectId, since, until);
         long totalClicks = clickEventRepository.countByTenantIdAndProjectId(tenantId, projectId);
 
         var allRules = merchRuleRepository.findByTenantIdAndProjectId(tenantId, projectId);
@@ -118,18 +187,17 @@ public class AnalyticsController {
                 .average().orElse(0.0);
 
         // Search volume stats
-        long totalSearches = searchEventRepository.countByTenantIdAndProjectIdAndSearchedAtAfter(tenantId, projectId, since);
-        Double avgLatencyMs = searchEventRepository.findAvgLatency(tenantId, projectId, since);
-        long zeroResultsInPeriod = zeroResultRepository.countByTenantIdAndProjectIdAndOccurredAtAfter(tenantId, projectId, since);
+        long totalSearches = searchEventRepository.countByTenantIdAndProjectIdAndSearchedAtBetween(tenantId, projectId, since, until);
+        Double avgLatencyMs = searchEventRepository.findAvgLatencyBetween(tenantId, projectId, since, until);
+        long zeroResultsInPeriod = zeroResultRepository.countByTenantIdAndProjectIdAndOccurredAtBetween(tenantId, projectId, since, until);
         double zeroResultRate = totalSearches > 0
                 ? Math.min(1.0, (double) zeroResultsInPeriod / totalSearches)
                 : 0.0;
 
         // Zero result queries
-        long zeroResultCount = zeroResultRepository.countByTenantIdAndProjectIdAndOccurredAtAfter(
-                tenantId, projectId, since);
+        long zeroResultCount = zeroResultsInPeriod;
         List<Object[]> allZeroResultQueries = zeroResultRepository
-                .findTopZeroResultQueries(tenantId, projectId, since);
+                .findTopZeroResultQueriesBetween(tenantId, projectId, since, until);
 
         // actioned = a rule was created via "Create Rule" (NR-69) linking back to this
         // exact query text; resolved = that rule is LIVE+enabled and a search for the
@@ -154,8 +222,8 @@ public class AnalyticsController {
                     boolean actioned = rule != null;
                     boolean resolved = actioned
                             && rule.getStatus().name().equals("LIVE") && rule.isEnabled()
-                            && searchEventRepository.existsByTenantIdAndProjectIdAndQueryIgnoreCaseAndResultCountGreaterThanAndSearchedAtAfter(
-                                    tenantId, projectId, query, 0, since);
+                            && searchEventRepository.existsByTenantIdAndProjectIdAndQueryIgnoreCaseAndResultCountGreaterThanAndSearchedAtBetween(
+                                    tenantId, projectId, query, 0, since, until);
                     z.put("actioned", actioned);
                     z.put("resolved", resolved);
                     if (rule != null) {
@@ -189,31 +257,47 @@ public class AnalyticsController {
         overview.put("latestMrr10", latestQuality.map(q -> q.getMrrAt10()).orElse(null));
         overview.put("latestQualityRunAt", latestQuality.map(q -> q.getRunAt()).orElse(null));
         overview.put("periodDays", days);
+        addWindowMeta(overview, window, projectId);
 
         return overview;
     }
 
 
     @GetMapping("/trends")
-    public ResponseEntity<?> getTrends(@RequestParam(defaultValue = "30") int days) {
+    public ResponseEntity<?> getTrends(@RequestParam(defaultValue = "30") int days,
+                                        @RequestParam(required = false) String startDate,
+                                        @RequestParam(required = false) String endDate,
+                                        @RequestParam(required = false) String projectId) {
         String tenantId = TenantContext.getTenantId();
-        String projectId = TenantContext.getProjectId();
-        Instant since = Instant.now().minus(days, ChronoUnit.DAYS);
+        String resolvedProjectId = resolveProjectId(projectId);
+        boolean customRange = startDate != null && !startDate.isBlank();
+        Window window = resolveWindow(days, startDate, endDate);
 
-        // Get daily search stats from search_events
+        // Day buckets: a clean day-by-day walk of the resolved window for a custom
+        // range, or the original "today back N days" walk otherwise (kept separate
+        // so the default, far more common path is byte-for-byte unchanged).
+        List<Instant> dayStarts = new ArrayList<>();
+        if (customRange) {
+            for (Instant d = window.since(); d.isBefore(window.until()); d = d.plus(1, ChronoUnit.DAYS)) {
+                dayStarts.add(d);
+            }
+        } else {
+            for (int i = days - 1; i >= 0; i--) {
+                dayStarts.add(Instant.now().minus(i, ChronoUnit.DAYS).truncatedTo(ChronoUnit.DAYS));
+            }
+        }
+
         List<Map<String, Object>> trends = new ArrayList<>();
-        for (int i = days - 1; i >= 0; i--) {
-            Instant dayStart = Instant.now().minus(i, ChronoUnit.DAYS)
-                    .truncatedTo(ChronoUnit.DAYS);
+        for (Instant dayStart : dayStarts) {
             Instant dayEnd = dayStart.plus(1, ChronoUnit.DAYS);
             String dateStr = dayStart.toString().substring(0, 10);
 
             long searches = searchEventRepository
-                    .countByTenantIdAndProjectIdAndSearchedAtBetween(tenantId, projectId, dayStart, dayEnd);
+                    .countByTenantIdAndProjectIdAndSearchedAtBetween(tenantId, resolvedProjectId, dayStart, dayEnd);
             long zeroResults = zeroResultRepository
-                    .countByTenantIdAndProjectIdAndOccurredAtBetween(tenantId, projectId, dayStart, dayEnd);
+                    .countByTenantIdAndProjectIdAndOccurredAtBetween(tenantId, resolvedProjectId, dayStart, dayEnd);
             Double avgLatency = searchEventRepository
-                    .findAvgLatencyBetween(tenantId, projectId, dayStart, dayEnd);
+                    .findAvgLatencyBetween(tenantId, resolvedProjectId, dayStart, dayEnd);
 
             if (searches > 0 || zeroResults > 0) {
                 Map<String, Object> day = new LinkedHashMap<>();
@@ -237,17 +321,22 @@ public class AnalyticsController {
      * /trends, so it isn't duplicated here.
      */
     @GetMapping("/search-health")
-    public ResponseEntity<?> getSearchHealth(@RequestParam(defaultValue = "30") int days) {
-        return ResponseEntity.ok(buildSearchHealth(days));
+    public ResponseEntity<?> getSearchHealth(@RequestParam(defaultValue = "30") int days,
+                                              @RequestParam(required = false) String startDate,
+                                              @RequestParam(required = false) String endDate,
+                                              @RequestParam(required = false) String projectId) {
+        return ResponseEntity.ok(buildSearchHealth(days, startDate, endDate, projectId));
     }
 
-    private Map<String, Object> buildSearchHealth(int days) {
+    private Map<String, Object> buildSearchHealth(int days, String startDate, String endDate, String requestedProjectId) {
         String tenantId = TenantContext.getTenantId();
-        String projectId = TenantContext.getProjectId();
-        Instant since = Instant.now().minus(days, ChronoUnit.DAYS);
+        String projectId = resolveProjectId(requestedProjectId);
+        Window window = resolveWindow(days, startDate, endDate);
+        Instant since = window.since();
+        Instant until = window.until();
 
         SearchEventRepository.LatencyPercentiles lp =
-                searchEventRepository.findLatencyPercentiles(tenantId, projectId, since);
+                searchEventRepository.findLatencyPercentilesBetween(tenantId, projectId, since, until);
         Map<String, Object> latency = new LinkedHashMap<>();
         latency.put("p50", lp.getP50() != null ? Math.round(lp.getP50()) : null);
         latency.put("p95", lp.getP95() != null ? Math.round(lp.getP95()) : null);
@@ -259,7 +348,7 @@ public class AnalyticsController {
                 .collect(Collectors.toMap(Project::getId, Project::getName));
 
         List<Map<String, Object>> projectVolume = searchEventRepository
-                .findVolumeByProject(tenantId, since).stream()
+                .findVolumeByProjectBetween(tenantId, since, until).stream()
                 .map(row -> {
                     long searches = row.getSearches();
                     long zeroResults = row.getZeroResults() != null ? row.getZeroResults() : 0;
@@ -279,6 +368,7 @@ public class AnalyticsController {
         response.put("periodDays", days);
         response.put("latency", latency);
         response.put("projectVolume", projectVolume);
+        addWindowMeta(response, window, projectId);
         return response;
     }
 
@@ -291,23 +381,28 @@ public class AnalyticsController {
      * fixed as part of this same change — see search-api/search-ui commits).
      */
     @GetMapping("/facet-usage")
-    public ResponseEntity<?> getFacetUsage(@RequestParam(defaultValue = "30") int days) {
-        return ResponseEntity.ok(buildFacetUsage(days));
+    public ResponseEntity<?> getFacetUsage(@RequestParam(defaultValue = "30") int days,
+                                            @RequestParam(required = false) String startDate,
+                                            @RequestParam(required = false) String endDate,
+                                            @RequestParam(required = false) String projectId) {
+        return ResponseEntity.ok(buildFacetUsage(days, startDate, endDate, projectId));
     }
 
-    private Map<String, Object> buildFacetUsage(int days) {
+    private Map<String, Object> buildFacetUsage(int days, String startDate, String endDate, String requestedProjectId) {
         String tenantId = TenantContext.getTenantId();
-        String projectId = TenantContext.getProjectId();
-        Instant since = Instant.now().minus(days, ChronoUnit.DAYS);
+        String projectId = resolveProjectId(requestedProjectId);
+        Window window = resolveWindow(days, startDate, endDate);
+        Instant since = window.since();
+        Instant until = window.until();
 
         List<FacetConfig> configuredFacets = facetConfigRepository
                 .findByTenantIdAndProjectIdOrderBySortOrderAsc(tenantId, projectId);
 
         List<SearchEvent> eventsWithFacets = searchEventRepository
-                .findWithSelectedFacets(tenantId, projectId, since);
+                .findWithSelectedFacetsBetween(tenantId, projectId, since, until);
 
         Set<String> sessionsWithClicks = new HashSet<>(
-                clickEventRepository.findDistinctSessionIdsWithClicks(tenantId, projectId, since));
+                clickEventRepository.findDistinctSessionIdsWithClicksBetween(tenantId, projectId, since, until));
 
         // fieldName -> value -> (occurrence count, distinct sessions that selected it)
         Map<String, Map<String, Long>> selectionCounts = new LinkedHashMap<>();
@@ -377,23 +472,29 @@ public class AnalyticsController {
         response.put("periodDays", days);
         response.put("facets", facetReport);
         response.put("unusedFacets", unusedFacets);
+        addWindowMeta(response, window, projectId);
         return response;
     }
 
     @GetMapping("/rules-performance")
-    public ResponseEntity<?> getRulesPerformance(@RequestParam(defaultValue = "30") int days) {
-        return ResponseEntity.ok(buildRulesPerformance(days));
+    public ResponseEntity<?> getRulesPerformance(@RequestParam(defaultValue = "30") int days,
+                                                  @RequestParam(required = false) String startDate,
+                                                  @RequestParam(required = false) String endDate,
+                                                  @RequestParam(required = false) String projectId) {
+        return ResponseEntity.ok(buildRulesPerformance(days, startDate, endDate, projectId));
     }
 
-    private Map<String, Object> buildRulesPerformance(int days) {
+    private Map<String, Object> buildRulesPerformance(int days, String startDate, String endDate, String requestedProjectId) {
         String tenantId = TenantContext.getTenantId();
-        String projectId = TenantContext.getProjectId();
-        Instant since = Instant.now().minus(days, ChronoUnit.DAYS);
+        String projectId = resolveProjectId(requestedProjectId);
+        Window window = resolveWindow(days, startDate, endDate);
+        Instant since = window.since();
+        Instant until = window.until();
 
         var rules = merchRuleRepository.findByTenantIdAndProjectId(tenantId, projectId);
 
         // Query-level clicks/impressions (from search_events) for CTR + CTR lift.
-        List<Object[]> queryStats = clickEventRepository.findQueryStats(tenantId, projectId, since);
+        List<Object[]> queryStats = clickEventRepository.findQueryStatsBetween(tenantId, projectId, since, until);
         long totalClicks = 0, totalImpressions = 0;
         for (Object[] row : queryStats) {
             totalClicks += ((Number) row[1]).longValue();
@@ -401,7 +502,7 @@ public class AnalyticsController {
         }
         double avgCtr = totalImpressions > 0 ? (double) totalClicks / totalImpressions : 0.0;
 
-        List<Object[]> revenueStats = clickEventRepository.findRevenueByQuery(tenantId, projectId, since);
+        List<Object[]> revenueStats = clickEventRepository.findRevenueByQueryBetween(tenantId, projectId, since, until);
 
         List<Map<String, Object>> performance = rules.stream().map(rule -> {
             // Approximate attribution: aggregate clicks/impressions/revenue across every
@@ -446,6 +547,7 @@ public class AnalyticsController {
         response.put("rules", performance);
         response.put("avgCtr", Math.round(avgCtr * 1000.0) / 1000.0);
         response.put("periodDays", days);
+        addWindowMeta(response, window, projectId);
 
         return response;
     }
@@ -460,14 +562,17 @@ public class AnalyticsController {
      * decision, not an oversight.
      */
     @GetMapping(value = "/report.pdf", produces = MediaType.APPLICATION_PDF_VALUE)
-    public ResponseEntity<byte[]> getReportPdf(@RequestParam(defaultValue = "30") int days) {
-        Map<String, Object> overview = buildOverview(days);
-        Map<String, Object> searchHealth = buildSearchHealth(days);
-        Map<String, Object> facetUsage = buildFacetUsage(days);
-        Map<String, Object> rulesPerformance = buildRulesPerformance(days);
+    public ResponseEntity<byte[]> getReportPdf(@RequestParam(defaultValue = "30") int days,
+                                                @RequestParam(required = false) String startDate,
+                                                @RequestParam(required = false) String endDate,
+                                                @RequestParam(required = false) String projectId) {
+        Map<String, Object> overview = buildOverview(days, startDate, endDate, projectId);
+        Map<String, Object> searchHealth = buildSearchHealth(days, startDate, endDate, projectId);
+        Map<String, Object> facetUsage = buildFacetUsage(days, startDate, endDate, projectId);
+        Map<String, Object> rulesPerformance = buildRulesPerformance(days, startDate, endDate, projectId);
 
         byte[] pdf = pdfService.generateReport(
-                TenantContext.getTenantId(), TenantContext.getProjectId(), days,
+                TenantContext.getTenantId(), (String) overview.get("projectId"),
                 overview, searchHealth, facetUsage, rulesPerformance);
 
         return ResponseEntity.ok()

@@ -25,6 +25,23 @@ public interface ClickEventRepository extends JpaRepository<ClickEvent, String> 
                                    @Param("projectId") String projectId,
                                    @Param("since") Instant since);
 
+    /**
+     * NR-36: same as findQueryStats but with an explicit upper bound, for
+     * reporting over a custom (non-open-ended) date range.
+     */
+    @Query(value = "SELECT c.query, COUNT(c.id) as clicks, COALESCE(s.impressions, 0) as impressions " +
+           "FROM click_events c " +
+           "LEFT JOIN (SELECT query, COUNT(*) as impressions FROM search_events " +
+           "WHERE tenant_id = :tenantId AND project_id = :projectId AND searched_at >= :start AND searched_at < :end " +
+           "GROUP BY query) s ON c.query = s.query " +
+           "WHERE c.tenant_id = :tenantId AND c.project_id = :projectId " +
+           "AND c.clicked_at >= :start AND c.clicked_at < :end " +
+           "GROUP BY c.query, s.impressions ORDER BY impressions DESC", nativeQuery = true)
+    List<Object[]> findQueryStatsBetween(@Param("tenantId") String tenantId,
+                                          @Param("projectId") String projectId,
+                                          @Param("start") Instant start,
+                                          @Param("end") Instant end);
+
     @Query("SELECT c.query, c.productId, c.productTitle, AVG(c.position) as avgPosition, COUNT(c) as clicks " +
            "FROM ClickEvent c WHERE c.tenantId = :tenantId AND c.projectId = :projectId " +
            "AND c.clickedAt >= :since " +
@@ -41,6 +58,15 @@ public interface ClickEventRepository extends JpaRepository<ClickEvent, String> 
     List<Object[]> findRevenueByQuery(@Param("tenantId") String tenantId,
                                        @Param("projectId") String projectId,
                                        @Param("since") Instant since);
+
+    /** NR-36: findRevenueByQuery with an explicit upper bound for custom date ranges. */
+    @Query("SELECT c.query, SUM(COALESCE(c.productPrice, 0)) " +
+           "FROM ClickEvent c WHERE c.tenantId = :tenantId AND c.projectId = :projectId " +
+           "AND c.clickedAt >= :start AND c.clickedAt < :end GROUP BY c.query")
+    List<Object[]> findRevenueByQueryBetween(@Param("tenantId") String tenantId,
+                                              @Param("projectId") String projectId,
+                                              @Param("start") Instant start,
+                                              @Param("end") Instant end);
 
     @Query("SELECT c.productId, COUNT(c) as clickCount " +
             "FROM ClickEvent c " +
@@ -65,4 +91,12 @@ public interface ClickEventRepository extends JpaRepository<ClickEvent, String> 
     List<String> findDistinctSessionIdsWithClicks(@Param("tenantId") String tenantId,
                                                    @Param("projectId") String projectId,
                                                    @Param("since") Instant since);
+
+    /** NR-36: findDistinctSessionIdsWithClicks with an explicit upper bound for custom date ranges. */
+    @Query("SELECT DISTINCT c.sessionId FROM ClickEvent c WHERE c.tenantId = :tenantId " +
+           "AND c.projectId = :projectId AND c.clickedAt >= :start AND c.clickedAt < :end AND c.sessionId IS NOT NULL")
+    List<String> findDistinctSessionIdsWithClicksBetween(@Param("tenantId") String tenantId,
+                                                          @Param("projectId") String projectId,
+                                                          @Param("start") Instant start,
+                                                          @Param("end") Instant end);
 }

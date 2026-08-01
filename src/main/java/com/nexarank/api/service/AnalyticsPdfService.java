@@ -37,7 +37,7 @@ public class AnalyticsPdfService {
     private static final PDFont FONT_BODY = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
 
     @SuppressWarnings("unchecked")
-    public byte[] generateReport(String tenantId, String projectId, int days,
+    public byte[] generateReport(String tenantId, String projectId,
                                   Map<String, Object> overview,
                                   Map<String, Object> searchHealth,
                                   Map<String, Object> facetUsage,
@@ -47,7 +47,11 @@ public class AnalyticsPdfService {
 
             c.text(FONT_BOLD, 18, "NexaRank Analytics Report");
             c.gap(4);
-            c.text(FONT_BODY, 10, tenantId + " / " + projectId + " - last " + days + " days - generated "
+            // NR-36: date range now always reflects the actual resolved window (custom
+            // startDate/endDate, or the last `days` days) rather than assuming `days`,
+            // since a custom-range report would otherwise print a misleading period.
+            c.text(FONT_BODY, 10, tenantId + " / " + projectId + " (" + overview.get("startDate")
+                    + " to " + overview.get("endDate") + ") - generated "
                     + DateTimeFormatter.ofPattern("MMM d, yyyy HH:mm 'UTC'").withZone(ZoneOffset.UTC).format(Instant.now()));
             c.gap(16);
 
