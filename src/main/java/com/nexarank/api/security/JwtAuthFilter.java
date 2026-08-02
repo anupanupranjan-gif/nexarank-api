@@ -13,6 +13,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
@@ -48,7 +49,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 String token = authHeader.substring(7);
                 if (jwtUtil.isTokenValid(token)) {
                     String username = jwtUtil.extractUsername(token);
-                    String role = jwtUtil.extractRole(token);
+                    List<String> roles = jwtUtil.extractRoles(token);
                     String tenantId = jwtUtil.extractTenantId(token);
                     String projectId = jwtUtil.extractProjectId(token);
 
@@ -57,11 +58,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     TenantContext.setProjectId(projectId);
                     TenantContext.setPermissions(jwtUtil.extractPermissions(token));
 
+                    // NR-121: a token can carry more than one role (PROJECT_ADMIN =
+                    // MERCHANDISER + APPROVER together) — one Spring Security authority
+                    // per role, so hasRole/hasAnyRole work identically either way.
                     UsernamePasswordAuthenticationToken auth =
                             new UsernamePasswordAuthenticationToken(
                                     username,
                                     null,
-                                    List.of(new SimpleGrantedAuthority("ROLE_" + role))
+                                    roles.stream().map(r -> new SimpleGrantedAuthority("ROLE_" + r)).collect(Collectors.toList())
                             );
                     SecurityContextHolder.getContext().setAuthentication(auth);
                 }

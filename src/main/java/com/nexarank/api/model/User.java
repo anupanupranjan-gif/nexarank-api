@@ -41,6 +41,10 @@ public class User {
     @Column(name = "created_at")
     private Instant createdAt = Instant.now();
 
+    /** NR-121: which project this user last activated (login or explicit switch). Null until first resolved. */
+    @Column(name = "last_active_project_id")
+    private String lastActiveProjectId;
+
     public enum Role {
         STAKEHOLDER, VIEWER, MERCHANDISER, APPROVER, ADMIN, TENANT_ADMIN, SUPER_ADMIN
     }
@@ -65,4 +69,6 @@ public class User {
     public void setGroupId(String groupId) { this.groupId = groupId; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+    public String getLastActiveProjectId() { return lastActiveProjectId; }
+    public void setLastActiveProjectId(String lastActiveProjectId) { this.lastActiveProjectId = lastActiveProjectId; }
 }

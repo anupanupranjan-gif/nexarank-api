@@ -8,6 +8,7 @@ import com.nexarank.api.repository.UserGroupMembershipRepository;
 import java.util.List;
 import java.util.stream.Collectors;
 import com.nexarank.api.security.JwtUtil;
+import com.nexarank.api.service.ProjectAccessService;
 import com.nexarank.api.service.RefreshTokenService;
 import com.nexarank.api.service.UserService;
 import jakarta.servlet.http.Cookie;
@@ -46,6 +47,7 @@ public class AuthController {
     private final GroupPermissionRepository groupPermissionRepository;
     private final UserGroupMembershipRepository membershipRepository;
     private final RefreshTokenService refreshTokenService;
+    private final ProjectAccessService projectAccessService;
 
     @Value("${nexarank.cookie.secure:false}")
     private boolean cookieSecure;
@@ -54,13 +56,15 @@ public class AuthController {
                           UserGroupRepository userGroupRepository,
                           GroupPermissionRepository groupPermissionRepository,
                           UserGroupMembershipRepository membershipRepository,
-                          RefreshTokenService refreshTokenService) {
+                          RefreshTokenService refreshTokenService,
+                          ProjectAccessService projectAccessService) {
         this.userService = userService;
         this.jwtUtil = jwtUtil;
         this.userGroupRepository = userGroupRepository;
         this.groupPermissionRepository = groupPermissionRepository;
         this.membershipRepository = membershipRepository;
         this.refreshTokenService = refreshTokenService;
+        this.projectAccessService = projectAccessService;
     }
 
     @PostMapping("/login")
@@ -72,8 +76,18 @@ public class AuthController {
         return userService.findByUsername(username)
                 .filter(user -> userService.validatePassword(password, user.getPassword()))
                 .filter(User::isEnabled)
-                .map(user -> {
-                    Map<String, Object> tokenResponse = buildAccessTokenResponse(user);
+                .<ResponseEntity<?>>map(user -> {
+                    // NR-121: no project picker on the login form — resolve it
+                    // server-side (last-active if still valid, else a sensible
+                    // default) rather than exposing project names to an
+                    // unauthenticated visitor.
+                    String projectId = projectAccessService.resolveActiveProjectId(user);
+                    if (projectId == null) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                                .body(Map.of("error", "No project access configured for this user"));
+                    }
+                    List<String> roles = projectAccessService.activateProject(user, projectId);
+                    Map<String, Object> tokenResponse = buildAccessTokenResponse(user, projectId, roles);
                     issueRefreshCookie(user, request, response);
                     return ResponseEntity.ok(tokenResponse);
                 })
@@ -86,9 +100,16 @@ public class AuthController {
      * normal Authorization: Bearer flow JwtAuthFilter expects. This
      * endpoint does its own verification instead (hash lookup, expiry,
      * revocation), same shape as /login doing its own password check.
+     *
+     * NR-121: doubles as the project-switch endpoint. An optional
+     * projectId in the body switches the active project (validated against
+     * user_projects / tenant membership); omitted, it re-resolves whatever
+     * the user last had active — refresh_tokens itself deliberately carries
+     * no project context, so this is the one place that state lives.
      */
     @PostMapping("/refresh")
     public ResponseEntity<?> refresh(@CookieValue(name = REFRESH_COOKIE_NAME, required = false) String refreshToken,
+                                      @RequestBody(required = false) Map<String, String> body,
                                       HttpServletRequest request, HttpServletResponse response) {
         if (refreshToken == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "No refresh token"));
@@ -100,13 +121,26 @@ public class AuthController {
             clearRefreshCookie(response);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Invalid or expired refresh token"));
         }
-        Optional<User> user = userService.findById(rotated.row().getUserId());
-        if (user.isEmpty()) {
+        Optional<User> userOpt = userService.findById(rotated.row().getUserId());
+        if (userOpt.isEmpty()) {
             clearRefreshCookie(response);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "User no longer exists"));
         }
+        User user = userOpt.get();
+        String requestedProjectId = body != null ? body.get("projectId") : null;
+        String projectId = requestedProjectId != null ? requestedProjectId : projectAccessService.resolveActiveProjectId(user);
+        if (projectId == null) {
+            clearRefreshCookie(response);
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "No project access configured for this user"));
+        }
+        List<String> roles;
+        try {
+            roles = projectAccessService.activateProject(user, projectId);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", e.getMessage()));
+        }
         setRefreshCookie(response, rotated.rawToken());
-        return ResponseEntity.ok(buildAccessTokenResponse(user.get()));
+        return ResponseEntity.ok(buildAccessTokenResponse(user, projectId, roles));
     }
 
     @PostMapping("/logout")
@@ -153,9 +187,8 @@ public class AuthController {
 
     // ── Internal ──────────────────────────────────────────────────────────────
 
-    private Map<String, Object> buildAccessTokenResponse(User user) {
+    private Map<String, Object> buildAccessTokenResponse(User user, String projectId, List<String> roles) {
         String tenantId = user.getTenantId() != null ? user.getTenantId() : "default";
-        String projectId = "main";
         // Load permissions from ALL user groups (union)
         List<String> permissions = membershipRepository.findByUserId(user.getId())
                 .stream()
@@ -168,11 +201,18 @@ public class AuthController {
             permissions = groupPermissionRepository.findByGroupId(user.getGroupId())
                     .stream().map(gp -> gp.getPermission().name()).collect(Collectors.toList());
         }
-        String token = jwtUtil.generateToken(user.getUsername(), user.getRole().name(), tenantId, projectId, permissions);
+        String token = jwtUtil.generateToken(user.getUsername(), roles, tenantId, projectId, permissions);
+        // "role" stays a single string for the existing frontend role-gating logic
+        // (canCreate/canApprove/etc. all check a single auth.role) — the full list
+        // is also included as "roles" for when PROJECT_ADMIN UI support is built.
+        // Every role a real account holds today is single-valued in practice, so
+        // roles.get(0) is exact, not an approximation, until PROJECT_ADMIN ships.
+        String primaryRole = roles.isEmpty() ? user.getRole().name() : roles.get(0);
         return Map.of(
                 "token", token,
                 "username", user.getUsername(),
-                "role", user.getRole().name(),
+                "role", primaryRole,
+                "roles", roles,
                 "tenantId", tenantId,
                 "projectId", projectId,
                 "groupId", user.getGroupId() != null ? user.getGroupId() : "",

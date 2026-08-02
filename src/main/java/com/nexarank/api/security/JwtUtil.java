@@ -25,10 +25,18 @@ public class JwtUtil {
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    public String generateToken(String username, String role, String tenantId, String projectId, List<String> permissions) {
+    /**
+     * NR-121: roles is a list, not a single string — a user can hold more
+     * than one project-scoped role on the same project (PROJECT_ADMIN =
+     * MERCHANDISER + APPROVER together, not a fourth stored role value).
+     * JwtAuthFilter grants one Spring Security authority per entry, so
+     * hasRole/hasAnyRole checks work identically whether a token carries
+     * one role or several.
+     */
+    public String generateToken(String username, List<String> roles, String tenantId, String projectId, List<String> permissions) {
         return Jwts.builder()
                 .subject(username)
-                .claim("role", role)
+                .claim("roles", roles)
                 .claim("tenantId", tenantId)
                 .claim("projectId", projectId)
                 .claim("permissions", permissions)
@@ -38,17 +46,15 @@ public class JwtUtil {
                 .compact();
     }
 
-    // Keep backward compatible overload
-    public String generateToken(String username, String role) {
-        return generateToken(username, role, "default", "main", List.of());
-    }
-
     public String extractUsername(String token) {
         return parseClaims(token).getSubject();
     }
 
-    public String extractRole(String token) {
-        return parseClaims(token).get("role", String.class);
+    @SuppressWarnings("unchecked")
+    public List<String> extractRoles(String token) {
+        Object roles = parseClaims(token).get("roles");
+        if (roles instanceof List) return (List<String>) roles;
+        return List.of();
     }
 
     @SuppressWarnings("unchecked")
