@@ -4,10 +4,12 @@ package com.nexarank.api.controller;
 import com.nexarank.api.model.User;
 import com.nexarank.api.model.UserGroupMembership;
 import com.nexarank.api.repository.UserGroupMembershipRepository;
+import com.nexarank.api.service.ProjectAccessService;
 import com.nexarank.api.service.UserProjectService;
 import com.nexarank.api.service.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,10 +28,28 @@ public class UserController {
 
     private final UserService userService;
     private final UserProjectService userProjectService;
+    private final ProjectAccessService projectAccessService;
 
-    public UserController(UserService userService, UserProjectService userProjectService) {
+    public UserController(UserService userService, UserProjectService userProjectService,
+                           ProjectAccessService projectAccessService) {
         this.userService = userService;
         this.userProjectService = userProjectService;
+        this.projectAccessService = projectAccessService;
+    }
+
+    /**
+     * NR-121: ADMIN may assign/remove roles on any project; a PROJECT_ADMIN
+     * (holds both MERCHANDISER + APPROVER on the target project) may only do
+     * so for a project they themselves administer. SecurityConfig's matcher
+     * only establishes coarse role presence — this is the real, per-project
+     * check.
+     */
+    private boolean canManageProjectRoles(String projectId) {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        User caller = userService.findByUsername(username).orElse(null);
+        if (caller == null) return false;
+        if (caller.getRole() == User.Role.ADMIN) return true;
+        return projectAccessService.isProjectAdminFor(caller, projectId);
     }
 
     @GetMapping("/{id}/groups")
@@ -48,8 +68,10 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
 
-    // NR-121 step 2: write path for project-scoped roles (user_projects).
-    // Not read by any authorization check yet — see UserProjectService.
+    // NR-121: write path for project-scoped roles (user_projects). Read
+    // (GET) stays admin-only via the general /api/v1/users/** matcher,
+    // unchanged; the write endpoints below additionally allow a
+    // PROJECT_ADMIN caller, gated per-project by canManageProjectRoles().
     @GetMapping("/{id}/projects")
     public ResponseEntity<?> getUserProjectRoles(@PathVariable String id) {
         return ResponseEntity.ok(userProjectService.getProjectRoles(id));
@@ -58,6 +80,10 @@ public class UserController {
     @PostMapping("/{id}/projects/{projectId}")
     public ResponseEntity<?> assignUserProjectRole(@PathVariable String id, @PathVariable String projectId,
                                                     @RequestBody Map<String, String> body) {
+        if (!canManageProjectRoles(projectId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "You do not administer this project"));
+        }
         User.Role role;
         try {
             role = User.Role.valueOf(body.getOrDefault("role", "").toUpperCase());
@@ -73,12 +99,20 @@ public class UserController {
 
     @PostMapping("/{id}/projects/{projectId}/project-admin")
     public ResponseEntity<?> assignUserProjectAdmin(@PathVariable String id, @PathVariable String projectId) {
+        if (!canManageProjectRoles(projectId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "You do not administer this project"));
+        }
         return ResponseEntity.ok(userProjectService.assignProjectAdmin(id, projectId));
     }
 
     @DeleteMapping("/{id}/projects/{projectId}")
     public ResponseEntity<?> removeUserProjectRole(@PathVariable String id, @PathVariable String projectId,
                                                     @RequestParam String role) {
+        if (!canManageProjectRoles(projectId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "You do not administer this project"));
+        }
         User.Role parsedRole;
         try {
             parsedRole = User.Role.valueOf(role.toUpperCase());

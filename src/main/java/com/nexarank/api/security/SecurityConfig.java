@@ -82,7 +82,15 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 // user groups — admin only
                 .requestMatchers("/api/v1/groups/**").hasRole("ADMIN")
-                // user management — admin only
+                // NR-121: project-role assignment/removal additionally allows a
+                // PROJECT_ADMIN caller — this matcher only establishes coarse
+                // "holds some project-scoped role" presence; UserController does
+                // the fine-grained check that they administer the SPECIFIC target
+                // project before allowing the write. Read (GET) stays admin-only,
+                // unchanged — this is scoped to the write path only, per the ask.
+                .requestMatchers(HttpMethod.POST, "/api/v1/users/*/projects/**").hasAnyRole("ADMIN", "MERCHANDISER", "APPROVER")
+                .requestMatchers(HttpMethod.DELETE, "/api/v1/users/*/projects/**").hasAnyRole("ADMIN", "MERCHANDISER", "APPROVER")
+                // user management (create/delete accounts, groups) — admin only
                 .requestMatchers("/api/v1/users/**").hasRole("ADMIN")
                 // facet config — read for all, write for admin
                 .requestMatchers(HttpMethod.GET, "/api/v1/facets/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")

@@ -13,6 +13,7 @@ import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * NR-121 step 3: resolves which project a user's access token should be
@@ -67,6 +68,19 @@ public class ProjectAccessService {
             return projectRepository.findByTenantIdAndId(user.getTenantId(), projectId).isPresent();
         }
         return !userProjectRepository.findByUserIdAndProjectId(user.getId(), projectId).isEmpty();
+    }
+
+    /**
+     * PROJECT_ADMIN per NR-121's own definition: holds both MERCHANDISER and
+     * APPROVER on this specific project. Used to authorize the user_projects
+     * write path — a PROJECT_ADMIN may assign/remove MERCHANDISER/APPROVER
+     * for a project they administer, but not for any other project, and
+     * never user creation itself (that stays ADMIN-only, unchanged).
+     */
+    public boolean isProjectAdminFor(User user, String projectId) {
+        Set<User.Role> roles = userProjectRepository.findByUserIdAndProjectId(user.getId(), projectId).stream()
+                .map(UserProject::getRole).collect(Collectors.toSet());
+        return roles.contains(User.Role.MERCHANDISER) && roles.contains(User.Role.APPROVER);
     }
 
     /** Effective role(s) for this user on this project. Caller must have already validated access. */
