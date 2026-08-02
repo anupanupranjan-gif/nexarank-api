@@ -4,6 +4,7 @@ package com.nexarank.api.controller;
 import com.nexarank.api.model.User;
 import com.nexarank.api.model.UserGroupMembership;
 import com.nexarank.api.repository.UserGroupMembershipRepository;
+import com.nexarank.api.service.UserProjectService;
 import com.nexarank.api.service.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -23,9 +25,11 @@ import java.util.Map;
 public class UserController {
 
     private final UserService userService;
+    private final UserProjectService userProjectService;
 
-    public UserController(UserService userService) {
+    public UserController(UserService userService, UserProjectService userProjectService) {
         this.userService = userService;
+        this.userProjectService = userProjectService;
     }
 
     @GetMapping("/{id}/groups")
@@ -41,6 +45,47 @@ public class UserController {
     @DeleteMapping("/{id}/groups/{groupId}")
     public ResponseEntity<?> removeUserFromGroup(@PathVariable String id, @PathVariable String groupId) {
         userService.removeUserFromGroup(id, groupId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // NR-121 step 2: write path for project-scoped roles (user_projects).
+    // Not read by any authorization check yet — see UserProjectService.
+    @GetMapping("/{id}/projects")
+    public ResponseEntity<?> getUserProjectRoles(@PathVariable String id) {
+        return ResponseEntity.ok(userProjectService.getProjectRoles(id));
+    }
+
+    @PostMapping("/{id}/projects/{projectId}")
+    public ResponseEntity<?> assignUserProjectRole(@PathVariable String id, @PathVariable String projectId,
+                                                    @RequestBody Map<String, String> body) {
+        User.Role role;
+        try {
+            role = User.Role.valueOf(body.getOrDefault("role", "").toUpperCase());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid role. Must be MERCHANDISER or APPROVER"));
+        }
+        try {
+            return ResponseEntity.ok(userProjectService.assignRole(id, projectId, role));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{id}/projects/{projectId}/project-admin")
+    public ResponseEntity<?> assignUserProjectAdmin(@PathVariable String id, @PathVariable String projectId) {
+        return ResponseEntity.ok(userProjectService.assignProjectAdmin(id, projectId));
+    }
+
+    @DeleteMapping("/{id}/projects/{projectId}")
+    public ResponseEntity<?> removeUserProjectRole(@PathVariable String id, @PathVariable String projectId,
+                                                    @RequestParam String role) {
+        User.Role parsedRole;
+        try {
+            parsedRole = User.Role.valueOf(role.toUpperCase());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid role"));
+        }
+        userProjectService.removeRole(id, projectId, parsedRole);
         return ResponseEntity.noContent().build();
     }
 

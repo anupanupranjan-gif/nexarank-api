@@ -20,12 +20,15 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserGroupMembershipRepository membershipRepository;
+    private final UserProjectService userProjectService;
 
     public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder,
-                       UserGroupMembershipRepository membershipRepository) {
+                       UserGroupMembershipRepository membershipRepository,
+                       UserProjectService userProjectService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.membershipRepository = membershipRepository;
+        this.userProjectService = userProjectService;
     }
 
     public List<UserGroupMembership> getUserGroups(String userId) {
@@ -60,7 +63,20 @@ public class UserService {
         user.setEmail(email);
         user.setDisplayName(displayName);
         user.setEnabled(true);
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+
+        // NR-121 step 2: User.role remains authoritative for auth (unchanged,
+        // read by JwtAuthFilter/SecurityConfig) — this only additionally
+        // populates user_projects for the project-scoped roles, granted on
+        // every project in the tenant so a newly-created user behaves
+        // identically to the V37 migration's backfill for existing users,
+        // rather than needing separate logic. No authorization check reads
+        // this yet.
+        if (role == User.Role.MERCHANDISER || role == User.Role.APPROVER) {
+            userProjectService.grantRoleOnAllTenantProjects(saved.getId(), saved.getTenantId(), role);
+        }
+
+        return saved;
     }
 
     public List<User> getAllUsers() {
