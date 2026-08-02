@@ -9,4 +9,7 @@ import java.util.Optional;
 public interface JudgmentSetRepository extends JpaRepository<JudgmentSet, String> {
     List<JudgmentSet> findByTenantIdAndProjectIdOrderByCreatedAtDesc(String tenantId, String projectId);
     Optional<JudgmentSet> findByTenantIdAndProjectIdAndName(String tenantId, String projectId, String name);
+
+    /** NR-121: ownership guard for per-set operations (get/save judgments, stats, delete) — a raw setId alone is an IDOR. */
+    Optional<JudgmentSet> findByIdAndTenantIdAndProjectId(String id, String tenantId, String projectId);
 }

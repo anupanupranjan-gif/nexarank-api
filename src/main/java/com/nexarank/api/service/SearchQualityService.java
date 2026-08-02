@@ -3,9 +3,11 @@ package com.nexarank.api.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nexarank.api.model.QualityEvalResult;
 import com.nexarank.api.model.SearchQualityResult;
 import com.nexarank.api.model.SearchQualityResult.IntentMetrics;
 import com.nexarank.api.model.SearchQualityResult.ModeMetrics;
+import com.nexarank.api.repository.QualityEvalResultRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +17,14 @@ import org.springframework.web.client.RestTemplate;
 import java.net.URI;
 import java.util.*;
 
+/**
+ * NR-121: results are now persisted per tenant+project via
+ * QualityEvalResultRepository (quality_eval_results already existed, tenant/
+ * project scoped, but nothing ever wrote to it before this) — replacing a
+ * single in-memory field that was shared across every tenant and project,
+ * a real cross-tenant data leak (one ADMIN's "Run" overwrote what every
+ * other tenant's MERCHANDISER saw on this page).
+ */
 @Service
 public class SearchQualityService {
 
@@ -28,9 +38,7 @@ public class SearchQualityService {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper mapper;
-
-    // Cache last result in memory — in Phase 24 this moves to ES for history
-    private SearchQualityResult lastResult;
+    private final QualityEvalResultRepository qualityEvalResultRepository;
 
     // 30-query test set with expert judgments (grades 0-3)
     // Format: queryId -> {query, intent, grades: [bm25grades, hybridGrades]}
@@ -67,20 +75,34 @@ public class SearchQualityService {
         new QuerySpec("Q30", "filter",                "short",        new int[]{1,2,1,0,2,1,0,1,0,1}, new int[]{2,2,2,1,1,1,0,1,1,0})
     );
 
-    public SearchQualityService(RestTemplate restTemplate, ObjectMapper mapper) {
+    public SearchQualityService(RestTemplate restTemplate, ObjectMapper mapper,
+                                 QualityEvalResultRepository qualityEvalResultRepository) {
         this.restTemplate = restTemplate;
         this.mapper = mapper;
+        this.qualityEvalResultRepository = qualityEvalResultRepository;
     }
 
-    public SearchQualityResult getLastResult() {
-        return lastResult;
+    public SearchQualityResult getLastResult(String tenantId, String projectId) {
+        return qualityEvalResultRepository.findFirstByTenantIdAndProjectIdOrderByRunAtDesc(tenantId, projectId)
+                .map(this::deserialize)
+                .orElse(null);
+    }
+
+    private SearchQualityResult deserialize(QualityEvalResult row) {
+        if (row.getDetailsJson() == null) return null;
+        try {
+            return mapper.readValue(row.getDetailsJson(), SearchQualityResult.class);
+        } catch (Exception e) {
+            log.warn("Failed to deserialize stored quality eval result {}: {}", row.getId(), e.getMessage());
+            return null;
+        }
     }
 
     /**
      * Run full evaluation — BM25 vs Hybrid.
      * Called on-demand from controller or scheduled weekly.
      */
-    public SearchQualityResult runEvaluation() {
+    public SearchQualityResult runEvaluation(String tenantId, String projectId) {
         log.info("Starting search quality evaluation on {} queries", TEST_QUERIES.size());
         long startTime = System.currentTimeMillis();
 
@@ -169,8 +191,26 @@ public class SearchQualityService {
         log.info("Evaluation complete in {}ms — NDCG@10={:.4f} MRR@10={:.4f} (hybrid, {} queries)",
             elapsed, result.getNdcg10(), result.getMrr10(), evaluated);
 
-        this.lastResult = result;
+        persist(tenantId, projectId, result);
         return result;
+    }
+
+    private void persist(String tenantId, String projectId, SearchQualityResult result) {
+        try {
+            QualityEvalResult row = new QualityEvalResult();
+            row.setId(UUID.randomUUID().toString());
+            row.setTenantId(tenantId);
+            row.setProjectId(projectId);
+            row.setRunAt(java.time.Instant.ofEpochMilli(result.getEvaluatedAt()));
+            row.setNdcgAt5(result.getNdcg5());
+            row.setNdcgAt10(result.getNdcg10());
+            row.setMrrAt10(result.getMrr10());
+            row.setQueriesEvaluated(result.getEvaluatedQueries());
+            row.setDetailsJson(mapper.writeValueAsString(result));
+            qualityEvalResultRepository.save(row);
+        } catch (Exception e) {
+            log.warn("Failed to persist quality eval result for {}/{}: {}", tenantId, projectId, e.getMessage());
+        }
     }
 
     // ── Private helpers ──────────────────────────────────────────────────────

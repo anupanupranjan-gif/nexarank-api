@@ -37,11 +37,17 @@ public class RuleNotificationService {
         this.userRepository = userRepository;
     }
 
-    /** DRAFT -> PENDING_REVIEW: notify every APPROVER and ADMIN in the tenant. */
+    /**
+     * DRAFT -> PENDING_REVIEW: notify every APPROVER assigned to this rule's
+     * project (NR-121 — APPROVER is project-scoped via user_projects, so a
+     * tenant-wide notify would reach approvers with no stake in this project)
+     * plus every ADMIN in the tenant (ADMIN stays tenant-wide, unaffected).
+     */
     public void notifySubmitted(MerchRule rule) {
         try {
             List<User> recipients = new ArrayList<>();
-            recipients.addAll(userRepository.findByTenantIdAndRoleAndEmailIsNotNull(rule.getTenantId(), User.Role.APPROVER));
+            recipients.addAll(userRepository.findByTenantIdAndProjectIdAndRoleAndEmailIsNotNull(
+                    rule.getTenantId(), rule.getProjectId(), User.Role.APPROVER));
             recipients.addAll(userRepository.findByTenantIdAndRoleAndEmailIsNotNull(rule.getTenantId(), User.Role.ADMIN));
 
             String subject = "NexaRank: rule pending review — " + rule.getQuery();

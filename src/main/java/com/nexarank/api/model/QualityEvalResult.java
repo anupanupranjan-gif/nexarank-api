@@ -35,6 +35,10 @@ public class QualityEvalResult {
     @Column
     private String notes;
 
+    /** NR-121: full SearchQualityResult (byMode/byIntent breakdown), JSON-serialized. */
+    @Column(name = "details_json", columnDefinition = "TEXT")
+    private String detailsJson;
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getTenantId() { return tenantId; }
@@ -53,4 +57,6 @@ public class QualityEvalResult {
     public void setQueriesEvaluated(Integer queriesEvaluated) { this.queriesEvaluated = queriesEvaluated; }
     public String getNotes() { return notes; }
     public void setNotes(String notes) { this.notes = notes; }
+    public String getDetailsJson() { return detailsJson; }
+    public void setDetailsJson(String detailsJson) { this.detailsJson = detailsJson; }
 }

@@ -61,6 +61,7 @@ public class JudgmentController {
 
     @DeleteMapping("/sets/{setId}")
     public ResponseEntity<?> deleteSet(@PathVariable String setId) {
+        if (!ownsSet(setId)) return ResponseEntity.notFound().build();
         setRepository.deleteById(setId);
         return ResponseEntity.noContent().build();
     }
@@ -69,12 +70,14 @@ public class JudgmentController {
 
     @GetMapping("/sets/{setId}/judgments")
     public ResponseEntity<?> getJudgments(@PathVariable String setId) {
+        if (!ownsSet(setId)) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(judgmentRepository.findBySetId(setId));
     }
 
     @PutMapping("/sets/{setId}/judgments")
     public ResponseEntity<?> saveJudgment(@PathVariable String setId,
                                            @RequestBody Map<String, Object> body) {
+        if (!ownsSet(setId)) return ResponseEntity.notFound().build();
         String query = (String) body.get("query");
         String productId = (String) body.get("productId");
         String productTitle = (String) body.get("productTitle");
@@ -124,6 +127,7 @@ public class JudgmentController {
 
     @GetMapping("/sets/{setId}/stats")
     public ResponseEntity<?> getSetStats(@PathVariable String setId) {
+        if (!ownsSet(setId)) return ResponseEntity.notFound().build();
         List<Judgment> judgments = judgmentRepository.findBySetId(setId);
         long totalJudgments = judgments.size();
         long queriesJudged = judgments.stream().map(Judgment::getQuery).distinct().count();
@@ -134,5 +138,17 @@ public class JudgmentController {
                 "queriesJudged", queriesJudged,
                 "avgGrade", Math.round(avgGrade * 100.0) / 100.0
         ));
+    }
+
+    /**
+     * NR-121: per-set operations previously took a raw setId with no
+     * ownership check at all — any authenticated caller who knew/guessed a
+     * UUID could read/edit/delete another tenant's judgment set. 404 (not
+     * 403) so a caller can't distinguish "doesn't exist" from "exists but
+     * isn't yours."
+     */
+    private boolean ownsSet(String setId) {
+        return setRepository.findByIdAndTenantIdAndProjectId(
+                setId, TenantContext.getTenantId(), TenantContext.getProjectId()).isPresent();
     }
 }

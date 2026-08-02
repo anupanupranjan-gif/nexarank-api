@@ -2,6 +2,7 @@
 package com.nexarank.api.controller;
 
 import com.nexarank.api.model.SearchQualityResult;
+import com.nexarank.api.security.TenantContext;
 import com.nexarank.api.service.SearchQualityService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,11 +18,12 @@ public class SearchQualityController {
     }
 
     /**
-     * GET latest cached result — fast, no API calls.
+     * GET latest cached result — fast, no API calls. NR-121: scoped to the
+     * caller's own tenant+project, not a global shared result.
      */
     @GetMapping
     public ResponseEntity<SearchQualityResult> getLatest() {
-        SearchQualityResult result = service.getLastResult();
+        SearchQualityResult result = service.getLastResult(TenantContext.getTenantId(), TenantContext.getProjectId());
         if (result == null) {
             return ResponseEntity.noContent().build();
         }
@@ -35,7 +37,7 @@ public class SearchQualityController {
      */
     @PostMapping("/run")
     public ResponseEntity<SearchQualityResult> runEvaluation() {
-        SearchQualityResult result = service.runEvaluation();
+        SearchQualityResult result = service.runEvaluation(TenantContext.getTenantId(), TenantContext.getProjectId());
         return ResponseEntity.ok(result);
     }
 }
