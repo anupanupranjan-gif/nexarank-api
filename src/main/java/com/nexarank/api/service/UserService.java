@@ -83,6 +83,10 @@ public class UserService {
         return userRepository.findByTenantId(TenantContext.getTenantId());
     }
 
+    public Optional<User> findById(String id) {
+        return userRepository.findById(id);
+    }
+
     public Optional<User> findByUsername(String username) {
         return userRepository.findByUsername(username);
     }

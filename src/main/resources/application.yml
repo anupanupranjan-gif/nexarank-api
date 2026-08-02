@@ -57,7 +57,15 @@ logging:
 nexarank:
   jwt:
     secret: ${JWT_SECRET:nexarank-dev-secret-key-2026-minimum-32-chars}
-    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+    # NR-120: access tokens are now short-lived (15 min default); session
+    # longevity comes from the separate, revocable refresh token instead.
+    expiration-ms: ${JWT_EXPIRATION_MS:900000}
+    refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000}
+  cookie:
+    # No TLS in this Kind dev cluster yet (NR-35 will add it) - a hardcoded
+    # Secure attribute would mean the browser never sends the cookie at all
+    # here. Flip to true once real TLS exists.
+    secure: ${COOKIE_SECURE:false}
   search-api:
     base-url: http://search-api.default.svc.cluster.local/api/v1
     api-key: searchx-dev-key-2026

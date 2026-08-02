@@ -31,8 +31,24 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // public endpoints
                 .requestMatchers("/api/v1/auth/login").permitAll()
+                // NR-120: neither endpoint's real credential is a JWT (it's the
+                // refresh-token cookie), so neither goes through the normal
+                // Authorization: Bearer flow — each does its own verification
+                // (hash lookup, expiry, revocation) instead, same shape as login.
+                // Logout in particular must work even when the access token has
+                // already expired (15 min) — that's the exact scenario it exists
+                // to handle, so gating it behind a valid Bearer token would be
+                // self-defeating.
+                .requestMatchers("/api/v1/auth/refresh", "/api/v1/auth/logout").permitAll()
                 .requestMatchers("/api/v1/admin/public/**").permitAll()
                 .requestMatchers("/api/v1/auth/register").hasRole("ADMIN")
+                // NR-120: self-service session listing/revoke-by-id needs to know
+                // who's asking (there's no cookie-only path for that, unlike
+                // logout's single-session revoke) — every real dashboard role,
+                // including STAKEHOLDER (email-only access still means a real
+                // login session).
+                .requestMatchers("/api/v1/auth/sessions/**")
+                        .hasAnyRole("STAKEHOLDER", "VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
                 .requestMatchers("/actuator/health").permitAll()
                 // rule enrichment — public, called by customer search services
                 .requestMatchers("/api/v1/rules/enrich").permitAll()
