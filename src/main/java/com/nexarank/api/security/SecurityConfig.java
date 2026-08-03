@@ -49,6 +49,11 @@ public class SecurityConfig {
                 // login session).
                 .requestMatchers("/api/v1/auth/sessions/**")
                         .hasAnyRole("STAKEHOLDER", "VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
+                // NR-121 step 6 / NR-122: self-service "which projects can I switch
+                // into" list backing the sidebar project switcher — same role set
+                // as sessions above, every real dashboard role.
+                .requestMatchers("/api/v1/auth/available-projects")
+                        .hasAnyRole("STAKEHOLDER", "VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
                 .requestMatchers("/actuator/health").permitAll()
                 // rule enrichment — public, called by customer search services
                 .requestMatchers("/api/v1/rules/enrich").permitAll()

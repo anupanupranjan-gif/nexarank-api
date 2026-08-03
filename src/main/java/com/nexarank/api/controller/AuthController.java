@@ -3,6 +3,7 @@ package com.nexarank.api.controller;
 
 import com.nexarank.api.model.RefreshToken;
 import com.nexarank.api.model.User;
+import com.nexarank.api.repository.ProjectRepository;
 import com.nexarank.api.repository.UserGroupRepository;
 import com.nexarank.api.repository.GroupPermissionRepository;
 import com.nexarank.api.repository.UserGroupMembershipRepository;
@@ -18,7 +19,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -49,6 +52,7 @@ public class AuthController {
     private final UserGroupMembershipRepository membershipRepository;
     private final RefreshTokenService refreshTokenService;
     private final ProjectAccessService projectAccessService;
+    private final ProjectRepository projectRepository;
 
     @Value("${nexarank.cookie.secure:false}")
     private boolean cookieSecure;
@@ -58,7 +62,8 @@ public class AuthController {
                           GroupPermissionRepository groupPermissionRepository,
                           UserGroupMembershipRepository membershipRepository,
                           RefreshTokenService refreshTokenService,
-                          ProjectAccessService projectAccessService) {
+                          ProjectAccessService projectAccessService,
+                          ProjectRepository projectRepository) {
         this.userService = userService;
         this.jwtUtil = jwtUtil;
         this.userGroupRepository = userGroupRepository;
@@ -66,6 +71,29 @@ public class AuthController {
         this.membershipRepository = membershipRepository;
         this.refreshTokenService = refreshTokenService;
         this.projectAccessService = projectAccessService;
+        this.projectRepository = projectRepository;
+    }
+
+    /**
+     * NR-121 step 6 / NR-122: self-service list of the projects the caller
+     * may currently switch into, backing the sidebar project switcher.
+     * Deliberately separate from GET /admin/tenants/{id}/projects (ADMIN-only,
+     * used by Analytics' cross-project reporting dropdown) — this one is
+     * "what can I, personally, switch my own active project to," available
+     * to every real dashboard role, not an admin capability.
+     */
+    @GetMapping("/available-projects")
+    public ResponseEntity<?> availableProjects() {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        User user = userService.findByUsername(username).orElseThrow();
+        List<Map<String, String>> result = projectAccessService.availableProjectIds(user).stream()
+                .map(projectRepository::findById)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .sorted((a, b) -> a.getName().compareToIgnoreCase(b.getName()))
+                .map(p -> Map.of("id", p.getId(), "name", p.getName()))
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(result);
     }
 
     @PostMapping("/login")
