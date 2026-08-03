@@ -95,6 +95,11 @@ public class SecurityConfig {
                 // unchanged — this is scoped to the write path only, per the ask.
                 .requestMatchers(HttpMethod.POST, "/api/v1/users/*/projects/**").hasAnyRole("ADMIN", "MERCHANDISER", "APPROVER")
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/users/*/projects/**").hasAnyRole("ADMIN", "MERCHANDISER", "APPROVER")
+                // NR-121 step 7: same pattern as above — coarse role presence here,
+                // UserController.canManageProjectRoles does the real per-project
+                // check (ADMIN, or PROJECT_ADMIN of the specific target project).
+                .requestMatchers(HttpMethod.GET, "/api/v1/users/directory").hasAnyRole("ADMIN", "MERCHANDISER", "APPROVER")
+                .requestMatchers(HttpMethod.GET, "/api/v1/users/project-roster/**").hasAnyRole("ADMIN", "MERCHANDISER", "APPROVER")
                 // user management (create/delete accounts, groups) — admin only
                 .requestMatchers("/api/v1/users/**").hasRole("ADMIN")
                 // facet config — read for all, write for admin

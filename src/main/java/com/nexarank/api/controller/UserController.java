@@ -3,7 +3,9 @@ package com.nexarank.api.controller;
 
 import com.nexarank.api.model.User;
 import com.nexarank.api.model.UserGroupMembership;
+import com.nexarank.api.model.UserProject;
 import com.nexarank.api.repository.UserGroupMembershipRepository;
+import com.nexarank.api.security.TenantContext;
 import com.nexarank.api.service.ProjectAccessService;
 import com.nexarank.api.service.UserProjectService;
 import com.nexarank.api.service.UserService;
@@ -19,8 +21,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/users")
@@ -121,6 +125,72 @@ public class UserController {
         }
         userProjectService.removeRole(id, projectId, parsedRole);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * NR-121 step 7: lightweight tenant user list backing project-role
+     * assignment pickers. Deliberately NOT the full GET / (ADMIN-only,
+     * returns the raw User entity) — this is a reduced field set available
+     * to ADMIN and to any PROJECT_ADMIN of their own currently-active
+     * project too, so they have someone to pick from when assigning roles
+     * on the project they administer without exposing the full tenant user
+     * roster/admin surface.
+     */
+    @GetMapping("/directory")
+    public ResponseEntity<?> directory() {
+        if (!canManageProjectRoles(TenantContext.getProjectId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "Not authorized"));
+        }
+        // Only MERCHANDISER/APPROVER base-role users are meaningful picks here —
+        // a project-scoped role attached to a tenant-wide user (VIEWER/ADMIN/
+        // STAKEHOLDER) would be inert, since ProjectAccessService.isTenantWide
+        // means their JWT roles never consult user_projects at all.
+        List<Map<String, String>> result = userService.getAllUsers().stream()
+                .filter(u -> u.getRole() == User.Role.MERCHANDISER || u.getRole() == User.Role.APPROVER)
+                .map(u -> Map.of(
+                        "id", u.getId(),
+                        "username", u.getUsername(),
+                        "email", u.getEmail() != null ? u.getEmail() : "",
+                        "displayName", u.getDisplayName() != null ? u.getDisplayName() : "",
+                        "role", u.getRole().name()))
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * NR-121 step 7: the inverse of GET /{id}/projects — every user with a
+     * role on a given project, enriched with username/email for display.
+     * Backs both the ADMIN per-project-roles editor and PROJECT_ADMIN's
+     * own scoped "My Team" view.
+     */
+    @GetMapping("/project-roster/{projectId}")
+    public ResponseEntity<?> projectRoster(@PathVariable String projectId) {
+        if (!canManageProjectRoles(projectId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "You do not administer this project"));
+        }
+        // NR-121: user_projects also carries the pre-existing V1 seed row for
+        // ADMIN (harmless residue — ADMIN's real authority comes from
+        // User.role, not this table, per ProjectAccessService.isTenantWide),
+        // which would otherwise show up as noise in a roster that's
+        // conceptually about MERCHANDISER/APPROVER only.
+        List<UserProject> rows = userProjectService.getRolesInProject(projectId).stream()
+                .filter(up -> up.getRole() == User.Role.MERCHANDISER || up.getRole() == User.Role.APPROVER)
+                .collect(Collectors.toList());
+        Map<String, User> usersById = userService.getAllUsers().stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+        List<Map<String, Object>> result = rows.stream()
+                .map(up -> {
+                    User u = usersById.get(up.getUserId());
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("userId", up.getUserId());
+                    row.put("role", up.getRole().name());
+                    row.put("username", u != null ? u.getUsername() : up.getUserId());
+                    row.put("email", u != null && u.getEmail() != null ? u.getEmail() : "");
+                    return row;
+                })
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping

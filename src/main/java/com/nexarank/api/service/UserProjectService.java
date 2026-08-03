@@ -77,6 +77,11 @@ public class UserProjectService {
         return userProjectRepository.findByUserIdAndProjectId(userId, projectId);
     }
 
+    /** NR-121 step 7: the inverse lookup — every role row for a project, backing "who's on this project" UI. */
+    public List<UserProject> getRolesInProject(String projectId) {
+        return userProjectRepository.findByProjectId(projectId);
+    }
+
     /**
      * Grants a project-scoped role on every project in a tenant — the same
      * "don't tighten access" bridge philosophy as the V37 migration's
