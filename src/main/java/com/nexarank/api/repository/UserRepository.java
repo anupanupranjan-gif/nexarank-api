@@ -11,6 +11,8 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<User, String> {
     Optional<User> findByUsername(String username);
     Optional<User> findByTenantIdAndUsername(String tenantId, String username);
+    /** NR-65: forgot-password/resend-verification accept either username or email; email has no uniqueness constraint, so this takes the first match. */
+    Optional<User> findFirstByEmail(String email);
     List<User> findByTenantId(String tenantId);
     List<User> findByTenantIdAndEmailIsNotNull(String tenantId);
     List<User> findByTenantIdAndRoleAndEmailIsNotNull(String tenantId, User.Role role);

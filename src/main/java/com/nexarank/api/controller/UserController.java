@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -229,5 +230,74 @@ public class UserController {
     public ResponseEntity<Void> deleteUser(@PathVariable String id) {
         userService.deleteUser(id);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * NR-65: admin invites a user by email instead of setting a password
+     * directly. ADMIN-only, same as createUser — a PROJECT_ADMIN may assign
+     * project roles on projects they administer (see canManageProjectRoles
+     * above) but per NR-121's explicit instruction never creates accounts.
+     * Falls under the general /api/v1/users/** ADMIN-only matcher, no
+     * SecurityConfig change needed.
+     */
+    @PostMapping("/invite")
+    public ResponseEntity<?> inviteUser(@RequestBody Map<String, String> body) {
+        String username = body.get("username");
+        String email = body.get("email");
+        String roleStr = body.get("role");
+        User.Role role;
+        try {
+            role = User.Role.valueOf(roleStr.toUpperCase());
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Invalid role. Must be one of: VIEWER, MERCHANDISER, APPROVER, ADMIN"));
+        }
+        try {
+            User user = userService.inviteUser(username, email, role, body.get("displayName"));
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(Map.of("id", user.getId(), "username", user.getUsername(), "role", user.getRole().name()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ── NR-65: self-service profile — deliberately a separate matcher group
+    // (/api/v1/users/me/**) from the ADMIN-only bulk user endpoints above,
+    // same pattern as /api/v1/auth/sessions — available to every real
+    // dashboard role for their OWN account only.
+
+    @GetMapping("/me")
+    public ResponseEntity<?> getMyProfile() {
+        User user = currentUser();
+        return ResponseEntity.ok(Map.of(
+                "id", user.getId(), "username", user.getUsername(), "role", user.getRole().name(),
+                "email", user.getEmail() != null ? user.getEmail() : "",
+                "displayName", user.getDisplayName() != null ? user.getDisplayName() : "",
+                "emailVerified", user.isEmailVerified()));
+    }
+
+    @PutMapping("/me")
+    public ResponseEntity<?> updateMyProfile(@RequestBody Map<String, String> body) {
+        User user = userService.updateProfile(currentUser().getId(), body.get("displayName"), body.get("email"));
+        return ResponseEntity.ok(Map.of(
+                "id", user.getId(), "username", user.getUsername(),
+                "email", user.getEmail() != null ? user.getEmail() : "",
+                "displayName", user.getDisplayName() != null ? user.getDisplayName() : "",
+                "emailVerified", user.isEmailVerified()));
+    }
+
+    @PostMapping("/me/change-password")
+    public ResponseEntity<?> changeMyPassword(@RequestBody Map<String, String> body) {
+        try {
+            userService.changePassword(currentUser().getId(), body.get("currentPassword"), body.get("newPassword"));
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    private User currentUser() {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        return userService.findByUsername(username).orElseThrow();
     }
 }

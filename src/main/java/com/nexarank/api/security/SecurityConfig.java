@@ -40,6 +40,12 @@ public class SecurityConfig {
                 // to handle, so gating it behind a valid Bearer token would be
                 // self-defeating.
                 .requestMatchers("/api/v1/auth/refresh", "/api/v1/auth/logout").permitAll()
+                // NR-65: invite/reset/verify links are each their own credential
+                // (a single-use emailed token, not a JWT) — same public + self-
+                // verifying shape as /refresh above, not gated behind Bearer auth.
+                .requestMatchers("/api/v1/auth/accept-invite", "/api/v1/auth/forgot-password",
+                        "/api/v1/auth/reset-password", "/api/v1/auth/verify-email",
+                        "/api/v1/auth/resend-verification").permitAll()
                 .requestMatchers("/api/v1/admin/public/**").permitAll()
                 .requestMatchers("/api/v1/auth/register").hasRole("ADMIN")
                 // NR-120: self-service session listing/revoke-by-id needs to know
@@ -100,6 +106,12 @@ public class SecurityConfig {
                 // check (ADMIN, or PROJECT_ADMIN of the specific target project).
                 .requestMatchers(HttpMethod.GET, "/api/v1/users/directory").hasAnyRole("ADMIN", "MERCHANDISER", "APPROVER")
                 .requestMatchers(HttpMethod.GET, "/api/v1/users/project-roster/**").hasAnyRole("ADMIN", "MERCHANDISER", "APPROVER")
+                // NR-65: self-service profile for the caller's OWN account —
+                // every real dashboard role, same set as /auth/sessions. Must be
+                // matched before the general /api/v1/users/** ADMIN-only fallback
+                // below (first-match-wins).
+                .requestMatchers("/api/v1/users/me/**")
+                        .hasAnyRole("STAKEHOLDER", "VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
                 // user management (create/delete accounts, groups) — admin only
                 .requestMatchers("/api/v1/users/**").hasRole("ADMIN")
                 // facet config — read for all, write for admin

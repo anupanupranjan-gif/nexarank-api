@@ -102,26 +102,34 @@ public class AuthController {
         String username = body.get("username");
         String password = body.get("password");
 
-        return userService.findByUsername(username)
+        Optional<User> match = userService.findByUsername(username)
                 .filter(user -> userService.validatePassword(password, user.getPassword()))
-                .filter(User::isEnabled)
-                .<ResponseEntity<?>>map(user -> {
-                    // NR-121: no project picker on the login form — resolve it
-                    // server-side (last-active if still valid, else a sensible
-                    // default) rather than exposing project names to an
-                    // unauthenticated visitor.
-                    String projectId = projectAccessService.resolveActiveProjectId(user);
-                    if (projectId == null) {
-                        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                                .body(Map.of("error", "No project access configured for this user"));
-                    }
-                    List<String> roles = projectAccessService.activateProject(user, projectId);
-                    Map<String, Object> tokenResponse = buildAccessTokenResponse(user, projectId, roles);
-                    issueRefreshCookie(user, request, response);
-                    return ResponseEntity.ok(tokenResponse);
-                })
-                .orElse(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(Map.of("error", "Invalid username or password")));
+                .filter(User::isEnabled);
+        if (match.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Invalid username or password"));
+        }
+        User user = match.get();
+        // NR-65: a correct password proves they own the account, so this gets
+        // a specific, helpful error rather than the generic invalid-credentials
+        // message above — an account with no email skips verification entirely
+        // (nothing to verify), same rule createUser/updateProfile already use.
+        if (user.getEmail() != null && !user.getEmail().isBlank() && !user.isEmailVerified()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Please verify your email before logging in", "code", "EMAIL_NOT_VERIFIED"));
+        }
+        // NR-121: no project picker on the login form — resolve it
+        // server-side (last-active if still valid, else a sensible
+        // default) rather than exposing project names to an
+        // unauthenticated visitor.
+        String projectId = projectAccessService.resolveActiveProjectId(user);
+        if (projectId == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "No project access configured for this user"));
+        }
+        List<String> roles = projectAccessService.activateProject(user, projectId);
+        Map<String, Object> tokenResponse = buildAccessTokenResponse(user, projectId, roles);
+        issueRefreshCookie(user, request, response);
+        return ResponseEntity.ok(tokenResponse);
     }
 
     /**
@@ -190,6 +198,79 @@ public class AuthController {
                     .ifPresent(row -> refreshTokenService.revokeOwn(row.getId(), row.getUserId()));
         }
         clearRefreshCookie(response);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ── NR-65: invite / password reset / email verification ────────────────
+    // All public — each does its own token verification (hash lookup,
+    // expiry, single-use), same shape as /refresh doing its own cookie
+    // verification instead of the normal Bearer flow.
+
+    @PostMapping("/accept-invite")
+    public ResponseEntity<?> acceptInvite(@RequestBody Map<String, String> body) {
+        String token = body.get("token");
+        String newPassword = body.get("newPassword");
+        if (token == null || newPassword == null || newPassword.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "token and newPassword are required"));
+        }
+        try {
+            userService.acceptInvite(token, newPassword);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Always 204 regardless of whether a match was found — anti-enumeration. */
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> body) {
+        String usernameOrEmail = body.get("usernameOrEmail");
+        if (usernameOrEmail != null && !usernameOrEmail.isBlank()) {
+            userService.requestPasswordReset(usernameOrEmail);
+        }
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> body) {
+        String token = body.get("token");
+        String newPassword = body.get("newPassword");
+        if (token == null || newPassword == null || newPassword.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "token and newPassword are required"));
+        }
+        try {
+            userService.resetPassword(token, newPassword);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/verify-email")
+    public ResponseEntity<?> verifyEmail(@RequestBody Map<String, String> body) {
+        String token = body.get("token");
+        if (token == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "token is required"));
+        }
+        try {
+            userService.verifyEmail(token);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Public/anti-enumeration by design (like forgot-password) — a user who
+     * can't log in because they're unverified has no Bearer token to
+     * authenticate a resend request with.
+     */
+    @PostMapping("/resend-verification")
+    public ResponseEntity<?> resendVerification(@RequestBody Map<String, String> body) {
+        String usernameOrEmail = body.get("usernameOrEmail");
+        if (usernameOrEmail != null && !usernameOrEmail.isBlank()) {
+            userService.resendVerification(usernameOrEmail);
+        }
         return ResponseEntity.noContent().build();
     }
 

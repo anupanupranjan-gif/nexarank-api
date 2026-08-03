@@ -45,6 +45,10 @@ public class User {
     @Column(name = "last_active_project_id")
     private String lastActiveProjectId;
 
+    /** NR-65: an account with no email is treated as verified (nothing to verify) — see UserService. */
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified = true;
+
     public enum Role {
         STAKEHOLDER, VIEWER, MERCHANDISER, APPROVER, ADMIN, TENANT_ADMIN, SUPER_ADMIN
     }
@@ -71,4 +75,6 @@ public class User {
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public String getLastActiveProjectId() { return lastActiveProjectId; }
     public void setLastActiveProjectId(String lastActiveProjectId) { this.lastActiveProjectId = lastActiveProjectId; }
+    public boolean isEmailVerified() { return emailVerified; }
+    public void setEmailVerified(boolean emailVerified) { this.emailVerified = emailVerified; }
 }
