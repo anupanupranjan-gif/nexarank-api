@@ -53,21 +53,38 @@ public class ProjectAccessService {
         return TENANT_WIDE_ROLES.contains(user.getRole());
     }
 
-    /** Every project a user may currently activate — their own assignments if project-scoped, every tenant project if tenant-wide. */
+    /**
+     * Every project a user may currently activate — their own assignments if
+     * project-scoped, every ENABLED tenant project if tenant-wide. A disabled
+     * project is never resolvable as an active project for anyone, regardless
+     * of role or assignment (found live during NR-121 step 5 regression: a
+     * project-scoped user whose only user_projects row pointed at a since-
+     * disabled project was otherwise stuck there with no way back).
+     */
     public List<String> availableProjectIds(User user) {
         if (isTenantWide(user)) {
-            return projectRepository.findByTenantId(user.getTenantId()).stream()
+            return projectRepository.findByTenantIdAndEnabled(user.getTenantId(), true).stream()
                     .map(Project::getId).toList();
         }
         return userProjectRepository.findByUserId(user.getId()).stream()
-                .map(UserProject::getProjectId).distinct().toList();
+                .map(UserProject::getProjectId).distinct()
+                .filter(this::isEnabledProject)
+                .toList();
     }
 
     public boolean validateAccess(User user, String projectId) {
         if (isTenantWide(user)) {
-            return projectRepository.findByTenantIdAndId(user.getTenantId(), projectId).isPresent();
+            return projectRepository.findByTenantIdAndId(user.getTenantId(), projectId)
+                    .filter(Project::isEnabled).isPresent();
         }
-        return !userProjectRepository.findByUserIdAndProjectId(user.getId(), projectId).isEmpty();
+        if (userProjectRepository.findByUserIdAndProjectId(user.getId(), projectId).isEmpty()) {
+            return false;
+        }
+        return isEnabledProject(projectId);
+    }
+
+    private boolean isEnabledProject(String projectId) {
+        return projectRepository.findById(projectId).map(Project::isEnabled).orElse(false);
     }
 
     /**
@@ -107,16 +124,14 @@ public class ProjectAccessService {
             return user.getLastActiveProjectId();
         }
         if (isTenantWide(user)) {
-            List<Project> projects = projectRepository.findByTenantId(user.getTenantId());
+            List<Project> projects = projectRepository.findByTenantIdAndEnabled(user.getTenantId(), true);
             return projects.stream()
                     .filter(p -> "main".equalsIgnoreCase(p.getName()))
                     .map(Project::getId)
                     .findFirst()
                     .orElseGet(() -> projects.stream().map(Project::getId).min(Comparator.naturalOrder()).orElse(null));
         }
-        return userProjectRepository.findByUserId(user.getId()).stream()
-                .map(UserProject::getProjectId).distinct()
-                .min(Comparator.naturalOrder()).orElse(null);
+        return availableProjectIds(user).stream().min(Comparator.naturalOrder()).orElse(null);
     }
 
     /** Validates, resolves roles, and persists the new last-active project in one step. */

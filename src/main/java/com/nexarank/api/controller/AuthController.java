@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 package com.nexarank.api.controller;
 
+import com.nexarank.api.model.RefreshToken;
 import com.nexarank.api.model.User;
 import com.nexarank.api.repository.UserGroupRepository;
 import com.nexarank.api.repository.GroupPermissionRepository;
@@ -114,14 +115,12 @@ public class AuthController {
         if (refreshToken == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "No refresh token"));
         }
-        RefreshTokenService.IssuedToken rotated = refreshTokenService
-                .rotate(refreshToken, deviceInfo(request), clientIp(request))
-                .orElse(null);
-        if (rotated == null) {
+        RefreshToken activeRow = refreshTokenService.findActiveByRawToken(refreshToken).orElse(null);
+        if (activeRow == null) {
             clearRefreshCookie(response);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Invalid or expired refresh token"));
         }
-        Optional<User> userOpt = userService.findById(rotated.row().getUserId());
+        Optional<User> userOpt = userService.findById(activeRow.getUserId());
         if (userOpt.isEmpty()) {
             clearRefreshCookie(response);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "User no longer exists"));
@@ -130,14 +129,26 @@ public class AuthController {
         String requestedProjectId = body != null ? body.get("projectId") : null;
         String projectId = requestedProjectId != null ? requestedProjectId : projectAccessService.resolveActiveProjectId(user);
         if (projectId == null) {
-            clearRefreshCookie(response);
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", "No project access configured for this user"));
         }
         List<String> roles;
         try {
             roles = projectAccessService.activateProject(user, projectId);
         } catch (IllegalArgumentException e) {
+            // NR-121 step 5 regression fix: validate the switch BEFORE rotating.
+            // The original ordering rotated unconditionally, so a rejected
+            // switch attempt still burned the presented refresh token server-
+            // side without ever sending the client the new cookie value —
+            // silently orphaning an otherwise-healthy session. Now a rejected
+            // switch leaves the presented token untouched and reusable.
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", e.getMessage()));
+        }
+        RefreshTokenService.IssuedToken rotated = refreshTokenService
+                .rotate(refreshToken, deviceInfo(request), clientIp(request))
+                .orElse(null);
+        if (rotated == null) {
+            clearRefreshCookie(response);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Invalid or expired refresh token"));
         }
         setRefreshCookie(response, rotated.rawToken());
         return ResponseEntity.ok(buildAccessTokenResponse(user, projectId, roles));
