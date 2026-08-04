@@ -3,6 +3,7 @@ package com.nexarank.api.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nexarank.api.model.Judgment;
 import com.nexarank.api.model.QualityEvalResult;
 import com.nexarank.api.model.SearchQualityResult;
 import com.nexarank.api.model.SearchQualityResult.IntentMetrics;
@@ -14,7 +15,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 /**
@@ -213,12 +215,78 @@ public class SearchQualityService {
         }
     }
 
+    /**
+     * NR-58 — NDCG@5/@10 and MRR@10 computed from a real judgment set's own
+     * APPROVED judgments against live search results, distinct from the
+     * hardcoded TEST_QUERIES benchmark above. Deliberately NOT persisted to
+     * quality_eval_results / blended into getLastResult() — that "latest"
+     * lookup is what AnalyticsController's overview KPI already reads, and
+     * this is a different, set-scoped metric that would otherwise silently
+     * redefine what that KPI means depending on eval order. Grades outside
+     * the judgment set (a live result the set never judged) count as 0
+     * (irrelevant), the standard IR-eval convention for ungraded results —
+     * same choice this class's own mapGrades() makes for its benchmark.
+     */
+    public Map<String, Object> evaluateFromJudgmentSet(String setId, List<Judgment> judgments) {
+        Map<String, Judgment> approved = judgments.stream()
+                .filter(j -> "APPROVED".equals(j.getStatus()))
+                .collect(java.util.stream.Collectors.toMap(
+                        j -> j.getQuery() + "::" + j.getProductId(), j -> j, (a, b) -> a));
+
+        List<String> queries = judgments.stream()
+                .filter(j -> "APPROVED".equals(j.getStatus()))
+                .map(Judgment::getQuery)
+                .distinct()
+                .toList();
+
+        List<Double> ndcg5s = new ArrayList<>();
+        List<Double> ndcg10s = new ArrayList<>();
+        List<Double> mrr10s = new ArrayList<>();
+        int evaluated = 0;
+
+        for (String query : queries) {
+            List<String> liveIds = fetchResultIds(query, "hybrid");
+            if (liveIds.isEmpty()) continue;
+
+            int k = Math.min(10, liveIds.size());
+            int[] grades = new int[k];
+            for (int i = 0; i < k; i++) {
+                Judgment j = approved.get(query + "::" + liveIds.get(i));
+                grades[i] = j != null ? j.getGrade() : 0;
+            }
+
+            ndcg5s.add(ndcg(grades, 5));
+            ndcg10s.add(ndcg(grades, 10));
+            mrr10s.add(mrr(grades, 10));
+            evaluated++;
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("setId", setId);
+        result.put("queriesEvaluated", evaluated);
+        result.put("queriesInSet", queries.size());
+        result.put("ndcg5", avg(ndcg5s));
+        result.put("ndcg10", avg(ndcg10s));
+        result.put("mrr10", avg(mrr10s));
+        return result;
+    }
+
     // ── Private helpers ──────────────────────────────────────────────────────
 
     private List<String> fetchResultIds(String query, String mode) {
         try {
+            // NR-58: URI.create(query).toASCIIString() throws on any query
+            // containing a space ("Illegal character in path") — found while
+            // building evaluateFromJudgmentSet() below, which calls this same
+            // method. Confirmed this silently broke every multi-word query in
+            // TEST_QUERIES (27 of 30) via the catch-all below, falling back to
+            // List.of() -> mapGrades()'s "liveIds.isEmpty() -> return
+            // judgmentGrades unchanged" path — meaning those 27 queries' NDCG/
+            // MRR reflected the hardcoded expert grades passed straight
+            // through, never a real live search-api ordering. Proper encoding
+            // fixes it for both this benchmark and NR-58's new judgment-set eval.
             String url = searchApiBaseUrl + "/search?q=" +
-                URI.create(query).toASCIIString() + "&mode=" + mode + "&size=10";
+                URLEncoder.encode(query, StandardCharsets.UTF_8) + "&mode=" + mode + "&size=10";
             var headers = new org.springframework.http.HttpHeaders();
             headers.set("X-API-Key", searchApiKey);
             var entity = new org.springframework.http.HttpEntity<>(headers);

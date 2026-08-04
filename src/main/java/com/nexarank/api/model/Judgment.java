@@ -32,6 +32,24 @@ public class Judgment {
     @Column(name = "judged_at")
     private Instant judgedAt = Instant.now();
 
+    /** NR-58: who authored the current grade — HUMAN (manual judging, default) or LLM (auto-scored). */
+    @Column(nullable = false)
+    private String source = "HUMAN";
+
+    /** NR-58: APPROVED (default — human judgments need no review) or PENDING_REVIEW (fresh LLM output). */
+    @Column(nullable = false)
+    private String status = "APPROVED";
+
+    /** NR-58: the LLM's original suggested grade, retained even after a human overrides `grade` — needed for agreement-rate tracking. */
+    @Column(name = "llm_grade")
+    private Integer llmGrade;
+
+    @Column(name = "reviewed_by")
+    private String reviewedBy;
+
+    @Column(name = "reviewed_at")
+    private Instant reviewedAt;
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getSetId() { return setId; }
@@ -48,4 +66,14 @@ public class Judgment {
     public void setJudgedBy(String judgedBy) { this.judgedBy = judgedBy; }
     public Instant getJudgedAt() { return judgedAt; }
     public void setJudgedAt(Instant judgedAt) { this.judgedAt = judgedAt; }
+    public String getSource() { return source; }
+    public void setSource(String source) { this.source = source; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    public Integer getLlmGrade() { return llmGrade; }
+    public void setLlmGrade(Integer llmGrade) { this.llmGrade = llmGrade; }
+    public String getReviewedBy() { return reviewedBy; }
+    public void setReviewedBy(String reviewedBy) { this.reviewedBy = reviewedBy; }
+    public Instant getReviewedAt() { return reviewedAt; }
+    public void setReviewedAt(Instant reviewedAt) { this.reviewedAt = reviewedAt; }
 }
