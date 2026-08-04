@@ -115,6 +115,59 @@ public class OllamaLlmAdapter implements LlmPort {
         }
     }
 
+    @Override
+    public String classify(String query, String promptTemplate, LlmConfig config) {
+        try {
+            String prompt = String.format(promptTemplate, query);
+
+            String body = mapper.writeValueAsString(Map.of(
+                "model",  config.getModel(),
+                "prompt", prompt,
+                "stream", false,
+                "options", Map.of(
+                    "temperature", 0.1,
+                    "num_predict", 15
+                )
+            ));
+
+            String url = config.getEndpoint() + "/api/generate";
+            String response = post(url, body, config);
+            if (response == null || response.isBlank()) {
+                log.warn("Ollama empty response for classify query='{}'", query);
+                return null;
+            }
+
+            JsonNode json = mapper.readTree(response);
+            String raw = json.path("response").asText("").trim();
+            if (raw.isBlank()) {
+                log.warn("Ollama classify returned blank for query='{}'", query);
+                return null;
+            }
+
+            // Take only the first line — small models tend to over-generate
+            if (raw.contains("\n")) {
+                raw = raw.substring(0, raw.indexOf("\n")).trim();
+            }
+
+            // Strip a "Label:"/"Classification:" style prefix if the model echoed it back
+            if (raw.contains(":")) {
+                String afterColon = raw.substring(raw.lastIndexOf(":") + 1).trim();
+                if (!afterColon.isBlank()) {
+                    raw = afterColon;
+                }
+            }
+
+            // Strip markdown bold markers and quotes
+            raw = raw.replaceAll("\\*\\*", "").replaceAll("[\"']", "").trim().toUpperCase();
+
+            return raw.isBlank() ? null : raw;
+
+        } catch (Exception e) {
+            log.warn("Ollama classify failed for query='{}': {}", query, e.getMessage());
+            return null;
+        }
+    }
+
     // ── HTTP helpers (HttpURLConnection, same pattern as ElasticsearchAdapter) ──
 
     private String get(String url, LlmConfig config) throws Exception {

@@ -16,9 +16,11 @@ import java.util.List;
  * Called by RuleEnrichmentService.enrich() — replaces the inline logic that was there.
  * Returns an EnrichedQuery, same shape as before. Zero changes to callers.
  *
- * Stage ordering within each group: defaultOrder() for now.
- * Per-project overrides from pipeline_stage_config (V18) will be wired in
- * once the config API is built in 26a.
+ * Stage ordering/enablement: defaultOrder() is the fallback, but per-project
+ * overrides from pipeline_stage_config (V18) — enabled + stage_order, editable
+ * via the Pipeline Editor UI — are now genuinely applied per request via
+ * PipelineStageConfigService. Previously this was a documented TODO and the
+ * DB table was write-only from the UI's perspective; this closes that gap.
  */
 @Service
 public class QueryPipelineOrchestrator {
@@ -28,12 +30,14 @@ public class QueryPipelineOrchestrator {
     private final List<PipelineStage> preQueryStages;
     private final List<PipelineStage> ruleStages;
     private final List<PipelineStage> postQueryStages;
+    private final PipelineStageConfigService stageConfigService;
 
     // Spring injects all @Component PipelineStage beans automatically
-    public QueryPipelineOrchestrator(List<PipelineStage> allStages) {
+    public QueryPipelineOrchestrator(List<PipelineStage> allStages, PipelineStageConfigService stageConfigService) {
         this.preQueryStages  = sorted(allStages, PipelineStage.StageGroup.PRE_QUERY);
         this.ruleStages      = sorted(allStages, PipelineStage.StageGroup.RULE_APPLICATION);
         this.postQueryStages = sorted(allStages, PipelineStage.StageGroup.POST_QUERY);
+        this.stageConfigService = stageConfigService;
         log.info("Pipeline stages loaded — pre={} rule={} post={}",
             names(preQueryStages), names(ruleStages), names(postQueryStages));
     }
@@ -57,16 +61,17 @@ public class QueryPipelineOrchestrator {
             selectedFacets
         );
 
+        String tenantId  = ctx.getTenantId();
+        String projectId = ctx.getProjectId();
+
         // PRE_QUERY — spell correction, synonyms, LLM rewrite, classification (26b, 26c)
-        // Currently empty — stages will be added as @Component beans in 26b/26c
-        runGroup(preQueryStages, ctx);
+        runGroup(stageConfigService.applyOverrides(preQueryStages, tenantId, projectId), ctx);
 
         // RULE_APPLICATION — rule lookup, A/B, conflict resolution, DSL translation
-        runGroup(ruleStages, ctx);
+        runGroup(stageConfigService.applyOverrides(ruleStages, tenantId, projectId), ctx);
 
         // POST_QUERY — personalization, filtering, diversity (26d)
-        // Currently empty — stages will be added as @Component beans in 26d
-        runGroup(postQueryStages, ctx);
+        runGroup(stageConfigService.applyOverrides(postQueryStages, tenantId, projectId), ctx);
 
         EnrichedQuery result = ctx.getEnrichedQuery();
         if (result == null) {

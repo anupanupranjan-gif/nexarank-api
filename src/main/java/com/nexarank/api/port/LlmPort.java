@@ -32,4 +32,18 @@ public interface LlmPort {
      * @param config         LLM connection config
      */
     String rewrite(String query, String promptTemplate, LlmConfig config);
+
+    /**
+     * Classify eCommerce search intent using the configured LLM.
+     * Returns the model's best-effort cleaned response text — the caller is
+     * responsible for validating it against the known intent labels, since
+     * small models can wrap the label in extra words the adapter can't
+     * confidently strip. Returns null (not the label) if the call fails or
+     * the response is empty. Must never throw.
+     *
+     * @param query          the current search query
+     * @param promptTemplate the prompt template with %s placeholder for the query
+     * @param config         LLM connection config
+     */
+    String classify(String query, String promptTemplate, LlmConfig config);
 }
