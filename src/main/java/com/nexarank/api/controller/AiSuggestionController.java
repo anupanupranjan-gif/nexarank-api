@@ -27,6 +27,12 @@ public class AiSuggestionController {
         return ResponseEntity.ok(suggestionService.suggestSynonymsForZeroResults());
     }
 
+    /** NR-57 — synonym suggestions sourced from live (not just zero-result) queries. */
+    @GetMapping("/synonyms/live")
+    public ResponseEntity<?> getLiveQuerySynonymSuggestions() {
+        return ResponseEntity.ok(suggestionService.suggestSynonymsForLiveQueries());
+    }
+
     @GetMapping("/rule-type-for-query")
     public ResponseEntity<?> getRuleTypeForQuery(@RequestParam String query) {
         return ResponseEntity.ok(suggestionService.suggestRuleTypeForQuery(query));

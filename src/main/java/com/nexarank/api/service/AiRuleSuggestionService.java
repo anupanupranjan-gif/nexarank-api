@@ -35,13 +35,16 @@ public class AiRuleSuggestionService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final WatchedQueryService watchedQueryService;
     private final BusinessSignalService businessSignalService;
+    private final LiveQuerySynonymCandidateService liveQuerySynonymCandidateService;
 
     public AiRuleSuggestionService(ClickEventRepository clickEventRepository,
                                    ZeroResultQueryRepository zeroResultRepository,
                                    MerchRuleRepository merchRuleRepository,
                                    SuggestionConfigService suggestionConfigService,
                                    LlmConfigService llmConfigService,
-                                   LlmAdapterFactory llmAdapterFactory, WatchedQueryService watchedQueryService, BusinessSignalService businessSignalService) {
+                                   LlmAdapterFactory llmAdapterFactory, WatchedQueryService watchedQueryService,
+                                   BusinessSignalService businessSignalService,
+                                   LiveQuerySynonymCandidateService liveQuerySynonymCandidateService) {
         this.clickEventRepository   = clickEventRepository;
         this.zeroResultRepository   = zeroResultRepository;
         this.merchRuleRepository    = merchRuleRepository;
@@ -51,6 +54,7 @@ public class AiRuleSuggestionService {
 
         this.watchedQueryService = watchedQueryService;
         this.businessSignalService = businessSignalService;
+        this.liveQuerySynonymCandidateService = liveQuerySynonymCandidateService;
     }
 
     /**
@@ -143,16 +147,75 @@ public class AiRuleSuggestionService {
         List<Map<String, Object>> suggestions = new ArrayList<>();
         for (String query : meaningfulQueries) {
             try {
-                String synonymSuggestion = askLlmForSynonyms(query);
+                String synonymSuggestion = askLlmForSynonyms(query, " and got zero results");
                 Map<String, Object> suggestion = new LinkedHashMap<>();
                 suggestion.put("type", "SYNONYM");
                 suggestion.put("query", query);
                 suggestion.put("reason", "Zero results — customers are not finding anything");
                 suggestion.put("aiSuggestion", synonymSuggestion);
+                suggestion.put("source", "ZERO_RESULT");
                 suggestions.add(suggestion);
             } catch (Exception e) {
                 log.warn("LLM suggestion failed for query '{}': {}", query, e.getMessage());
             }
+        }
+        return suggestions;
+    }
+
+    /**
+     * NR-57 — Suggest SYNONYM rules for live queries (not just zero-result
+     * ones), sourced from LlmSynonymSuggestionStage's frequency-tracked
+     * live_query_synonym_candidates. LLM calls only happen here, on-demand,
+     * for the queries actually reviewed on this page — never inline on the
+     * hot search path (see LlmSynonymSuggestionStage's own javadoc).
+     */
+    public List<Map<String, Object>> suggestSynonymsForLiveQueries() {
+        String tenantId  = TenantContext.getTenantId();
+        String projectId = TenantContext.getProjectId();
+        SuggestionConfig config = suggestionConfigService.getConfig();
+
+        Set<String> existingSynonymRuleQueries = merchRuleRepository
+                .findByTenantIdAndProjectId(tenantId, projectId)
+                .stream()
+                .filter(r -> r.getType() == MerchRule.RuleType.SYNONYM)
+                .map(r -> r.getQuery() == null ? "" : r.getQuery().toLowerCase().trim())
+                .collect(Collectors.toSet());
+
+        // Already covered by suggestSynonymsForZeroResults() — avoid double-listing the same query.
+        Instant since = Instant.now().minus(config.getLookbackDays(), ChronoUnit.DAYS);
+        Set<String> zeroResultQueries = zeroResultRepository
+                .findTopZeroResultQueries(tenantId, projectId, since)
+                .stream()
+                .map(row -> ((String) row[0]).toLowerCase().trim())
+                .collect(Collectors.toSet());
+
+        List<Map<String, Object>> candidates = liveQuerySynonymCandidateService
+                .findTopCandidates(tenantId, projectId, config.getMaxSuggestions() * 3);
+
+        List<Map<String, Object>> suggestions = new ArrayList<>();
+        for (Map<String, Object> row : candidates) {
+            String query = (String) row.get("query");
+            long hitCount = ((Number) row.get("hit_count")).longValue();
+
+            if (hitCount < config.getMinClicks()) continue;
+            if (existingSynonymRuleQueries.contains(query)) continue;
+            if (zeroResultQueries.contains(query)) continue;
+
+            try {
+                String synonymSuggestion = askLlmForSynonyms(query,
+                        " and got results, but broader synonym coverage could improve recall");
+                Map<String, Object> suggestion = new LinkedHashMap<>();
+                suggestion.put("type", "SYNONYM");
+                suggestion.put("query", query);
+                suggestion.put("reason", String.format(
+                        "Searched %d time(s) with existing results — synonyms could broaden recall further", hitCount));
+                suggestion.put("aiSuggestion", synonymSuggestion);
+                suggestion.put("source", "LIVE_QUERY");
+                suggestions.add(suggestion);
+            } catch (Exception e) {
+                log.warn("LLM live-query suggestion failed for query '{}': {}", query, e.getMessage());
+            }
+            if (suggestions.size() >= config.getMaxSuggestions()) break;
         }
         return suggestions;
     }
@@ -210,7 +273,7 @@ public class AiRuleSuggestionService {
         };
     }
 
-        private String askLlmForSynonyms(String query) {
+        private String askLlmForSynonyms(String query, String promptContext) {
         LlmConfig llmConfig = llmConfigService.getConfig().orElse(null);
 
         if (llmConfig == null) {
@@ -219,19 +282,25 @@ public class AiRuleSuggestionService {
         }
 
         try {
-            return callLlmForSynonyms(query, llmConfig);
+            return callLlmForSynonyms(query, promptContext, llmConfig);
         } catch (Exception e) {
             log.warn("LLM synonym suggestion failed for '{}': {}", query, e.getMessage());
             return fallbackSynonym(query);
         }
     }
 
-    private String callLlmForSynonyms(String query, LlmConfig llmConfig) {
+    /**
+     * @param promptContext short clause describing why synonyms are wanted — e.g.
+     *                       " and got zero results" (NR-69) or " and got results, but
+     *                       broader synonym coverage could improve recall" (NR-57) —
+     *                       so the same LLM-calling machinery serves both suggestion sources.
+     */
+    private String callLlmForSynonyms(String query, String promptContext, LlmConfig llmConfig) {
         String prompt = String.format(
-            "A customer searched for '%s' on an eCommerce site and got zero results. " +
+            "A customer searched for '%s' on an eCommerce site%s. " +
             "Suggest 2-3 alternative search terms or synonyms. " +
             "Reply with ONLY the synonyms separated by commas. No explanation.",
-            query
+            query, promptContext
         );
         return llmAdapterFactory.getAdapter(llmConfig).rewrite(query, prompt + "\n%s\nSynonyms:", llmConfig);
     }
@@ -258,7 +327,7 @@ public class AiRuleSuggestionService {
         }
         try {
             result.put("type", "SYNONYM");
-            result.put("aiSuggestion", callLlmForSynonyms(query, llmConfig));
+            result.put("aiSuggestion", callLlmForSynonyms(query, " and got zero results", llmConfig));
         } catch (Exception e) {
             log.warn("LLM rule-type suggestion failed for '{}': {} — defaulting to BOOST", query, e.getMessage());
             result.put("type", "BOOST");
