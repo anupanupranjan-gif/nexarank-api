@@ -54,10 +54,11 @@ public class RuleEnrichmentController {
             }
         }
 
-        if (query.isBlank()) {
-            return ResponseEntity.badRequest().build();
-        }
-
+        // NR-128: blank query is a valid, expected input — requireQuery=false
+        // rules (ADR-008) are documented to fire on every search regardless of
+        // query text, specifically to support category/brand/browse pages with
+        // no query text at all. Rejecting it here defeated that contract before
+        // rule matching ever ran.
         EnrichedQuery result = enrichmentService.enrich(query, engineType, zone, sessionId, selectedFacets);
         return ResponseEntity.ok(result);
     }
@@ -76,10 +77,8 @@ public class RuleEnrichmentController {
             @RequestParam(required = false) String sessionId,
             @RequestParam java.util.Map<String, String> allParams) {
 
-        if (query.isBlank()) {
-            return ResponseEntity.badRequest().build();
-        }
-
+        // NR-128: see the POST enrich() above — blank query must reach rule
+        // matching, not be rejected here.
         java.util.Map<String, String> selectedFacets = allParams.entrySet().stream()
                 .filter(e -> e.getKey().startsWith("facet_"))
                 .collect(java.util.stream.Collectors.toMap(

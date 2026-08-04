@@ -29,6 +29,11 @@ public class Tenant {
     @Column(name = "auto_publish_rules", nullable = false)
     private boolean autoPublishRules = true;
 
+    // NR-129: comma-separated list of origins allowed to call the public
+    // browser-facing enrich endpoints for this tenant (CORS allow-list).
+    @Column(name = "allowed_origins")
+    private String allowedOrigins;
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getDisplayName() { return displayName; }
@@ -43,4 +48,6 @@ public class Tenant {
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public boolean isAutoPublishRules() { return autoPublishRules; }
     public void setAutoPublishRules(boolean autoPublishRules) { this.autoPublishRules = autoPublishRules; }
+    public String getAllowedOrigins() { return allowedOrigins; }
+    public void setAllowedOrigins(String allowedOrigins) { this.allowedOrigins = allowedOrigins; }
 }

@@ -501,9 +501,16 @@ public class MerchRuleService {
                 .filter(r -> r.getActivateAt() == null || r.getActivateAt().isBefore(now))
                 .filter(r -> r.getExpireAt() == null || r.getExpireAt().isAfter(now))
                 .filter(r -> {
+                    // NR-128: a wildcard/blank query only satisfies requireQuery=false
+                    // rules (ADR-008 — those already match unconditionally via the
+                    // first clause). A requireQuery=true rule must still no-op on a
+                    // blank/browse query — it was previously being force-matched by
+                    // `isWildcard` here too, which never mattered while the controller
+                    // hard-rejected blank queries, but would have wrongly fired every
+                    // requireQuery=true rule on real browse traffic once that
+                    // controller-level rejection was removed.
                     boolean queryMatches = !r.isRequireQuery()
-                            || isWildcard
-                            || (query != null && containsRuleQuery(query, r.getQuery()));
+                            || (!isWildcard && query != null && containsRuleQuery(query, r.getQuery()));
                     boolean condMatch = triggerService.conditionsMatch(r.getId(),
                             selectedFacets != null ? selectedFacets : java.util.Map.of());
                     if (!queryMatches) return false;

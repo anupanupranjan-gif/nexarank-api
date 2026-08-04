@@ -108,6 +108,10 @@ public class TenantController {
             if (body.containsKey("displayName")) tenant.setDisplayName(body.get("displayName"));
             if (body.containsKey("enabled")) tenant.setEnabled(Boolean.parseBoolean(body.get("enabled")));
             if (body.containsKey("autoPublishRules")) tenant.setAutoPublishRules(Boolean.parseBoolean(body.get("autoPublishRules")));
+            // NR-129: comma-separated CORS allow-list for this tenant's storefront
+            // origin(s) — lets a future tenant's browser-facing integration be
+            // enabled with a data change here, not a code change/redeploy.
+            if (body.containsKey("allowedOrigins")) tenant.setAllowedOrigins(body.get("allowedOrigins"));
             return ResponseEntity.ok(tenantRepository.save(tenant));
         }).orElse(ResponseEntity.notFound().build());
     }
