@@ -2,6 +2,7 @@
 package com.nexarank.api.controller;
 
 import com.nexarank.api.service.AiRuleSuggestionService;
+import com.nexarank.api.service.LlmZeroResultRecoveryService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -12,9 +13,12 @@ import java.util.Map;
 public class AiSuggestionController {
 
     private final AiRuleSuggestionService suggestionService;
+    private final LlmZeroResultRecoveryService zeroResultRecoveryService;
 
-    public AiSuggestionController(AiRuleSuggestionService suggestionService) {
+    public AiSuggestionController(AiRuleSuggestionService suggestionService,
+                                   LlmZeroResultRecoveryService zeroResultRecoveryService) {
         this.suggestionService = suggestionService;
+        this.zeroResultRecoveryService = zeroResultRecoveryService;
     }
 
     @GetMapping("/boost")
@@ -51,5 +55,20 @@ public class AiSuggestionController {
     @GetMapping("/signals")
     public ResponseEntity<?> getSignalSuggestions() {
         return ResponseEntity.ok(suggestionService.suggestSignalDrivenRules());
+    }
+
+    /**
+     * NR-59 — called by search-api synchronously, right after its own search
+     * comes back with zero hits. Stateless: returns a suggestion (or null),
+     * writes nothing. search-api owns the retry and logs the outcome back via
+     * POST /zero-results — see LlmZeroResultRecoveryService's javadoc for why.
+     */
+    @PostMapping("/zero-result-recovery")
+    public ResponseEntity<?> recoverZeroResultQuery(@RequestBody Map<String, Object> body) {
+        String query = (String) body.get("query");
+        String suggestedQuery = zeroResultRecoveryService.suggestAlternativeQuery(query);
+        Map<String, Object> result = new java.util.HashMap<>();
+        result.put("suggestedQuery", suggestedQuery);
+        return ResponseEntity.ok(result);
     }
 }

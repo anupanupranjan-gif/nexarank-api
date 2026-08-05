@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 public interface ZeroResultQueryRepository extends JpaRepository<ZeroResultQuery, String> {
 
@@ -33,4 +34,16 @@ public interface ZeroResultQueryRepository extends JpaRepository<ZeroResultQuery
 
     long countByTenantIdAndProjectIdAndOccurredAtBetween(
             String tenantId, String projectId, Instant start, Instant end);
+
+    /** NR-59: recovery-rate numerator for the Analytics overview KPI. */
+    long countByTenantIdAndProjectIdAndOccurredAtBetweenAndRecoveredTrue(
+            String tenantId, String projectId, Instant start, Instant end);
+
+    /**
+     * NR-59: most recent row in-window carrying a suggestion for this exact
+     * query text, used to annotate the zero-result table with a
+     * recovered/suggestedQuery badge per query without a second grouped query.
+     */
+    Optional<ZeroResultQuery> findFirstByTenantIdAndProjectIdAndQueryIgnoreCaseAndSuggestedQueryIsNotNullAndOccurredAtBetweenOrderByOccurredAtDesc(
+            String tenantId, String projectId, String query, Instant start, Instant end);
 }

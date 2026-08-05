@@ -26,6 +26,14 @@ public class ZeroResultQuery {
     @Column(name = "occurred_at")
     private Instant occurredAt = Instant.now();
 
+    /** NR-59: the LLM-suggested alternative query, if a recovery attempt was made. */
+    @Column(name = "suggested_query")
+    private String suggestedQuery;
+
+    /** NR-59: whether retrying with suggestedQuery actually returned results. */
+    @Column(nullable = false)
+    private boolean recovered = false;
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getTenantId() { return tenantId; }
@@ -38,4 +46,8 @@ public class ZeroResultQuery {
     public void setSessionId(String sessionId) { this.sessionId = sessionId; }
     public Instant getOccurredAt() { return occurredAt; }
     public void setOccurredAt(Instant occurredAt) { this.occurredAt = occurredAt; }
+    public String getSuggestedQuery() { return suggestedQuery; }
+    public void setSuggestedQuery(String suggestedQuery) { this.suggestedQuery = suggestedQuery; }
+    public boolean isRecovered() { return recovered; }
+    public void setRecovered(boolean recovered) { this.recovered = recovered; }
 }

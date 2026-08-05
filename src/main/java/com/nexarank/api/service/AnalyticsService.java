@@ -174,6 +174,16 @@ public class AnalyticsService {
             else zeroResultUnactionedCount++;
         }
 
+        // NR-59: recovery rate — a distinct, LLM-driven signal from actioned/
+        // resolved above (which track a merchandiser explicitly creating a rule).
+        // "Recovered" means search-api's own live retry with an LLM-suggested
+        // alternative query returned results, with zero merchandiser involvement.
+        long zeroResultRecoveredCount = zeroResultRepository
+                .countByTenantIdAndProjectIdAndOccurredAtBetweenAndRecoveredTrue(tenantId, projectId, since, until);
+        double zeroResultRecoveryRate = zeroResultCount > 0
+                ? Math.min(1.0, (double) zeroResultRecoveredCount / zeroResultCount)
+                : 0.0;
+
         List<Map<String, Object>> topZeroResults = allZeroResultQueries.stream().limit(10)
                 .map(row -> {
                     String query = (String) row[0];
@@ -193,6 +203,12 @@ public class AnalyticsService {
                         z.put("ruleType", rule.getType());
                         z.put("ruleStatus", rule.getStatus());
                     }
+                    zeroResultRepository.findFirstByTenantIdAndProjectIdAndQueryIgnoreCaseAndSuggestedQueryIsNotNullAndOccurredAtBetweenOrderByOccurredAtDesc(
+                                    tenantId, projectId, query, since, until)
+                            .ifPresent(zrq -> {
+                                z.put("suggestedQuery", zrq.getSuggestedQuery());
+                                z.put("recovered", zrq.isRecovered());
+                            });
                     return z;
                 })
                 .collect(Collectors.toList());
@@ -212,6 +228,8 @@ public class AnalyticsService {
         overview.put("zeroResultCount", zeroResultCount);
         overview.put("zeroResultActionedCount", zeroResultActionedCount);
         overview.put("zeroResultUnactionedCount", zeroResultUnactionedCount);
+        overview.put("zeroResultRecoveredCount", zeroResultRecoveredCount);
+        overview.put("zeroResultRecoveryRate", Math.round(zeroResultRecoveryRate * 1000.0) / 1000.0);
         overview.put("topZeroResultQueries", topZeroResults);
         overview.put("topQueries", topQueries);
         overview.put("latestNdcg10", latestQuality.map(q -> q.getNdcgAt10()).orElse(null));

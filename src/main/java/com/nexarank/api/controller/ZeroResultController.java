@@ -31,6 +31,11 @@ public class ZeroResultController {
         zrq.setQuery((String) body.getOrDefault("query", ""));
         zrq.setSessionId((String) body.get("sessionId"));
         zrq.setOccurredAt(Instant.now());
+        // NR-59: search-api fills these in after calling the recovery-
+        // suggestion endpoint and retrying — this controller stays the single
+        // write path for zero_result_queries, same as before.
+        zrq.setSuggestedQuery((String) body.get("suggestedQuery"));
+        zrq.setRecovered(Boolean.TRUE.equals(body.get("recovered")));
         repository.save(zrq);
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", zrq.getId()));
     }

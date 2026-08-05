@@ -50,6 +50,17 @@ public class PipelineStageConfigService {
                 .toList();
     }
 
+    /**
+     * NR-59: standalone enabled check for a stage name not registered as a real
+     * PipelineStage bean (ZERO_RESULT_RECOVERY runs outside the orchestrator's
+     * own loop — see LlmZeroResultRecoveryService). Same 30s cache as applyOverrides.
+     */
+    public boolean isEnabled(String stageName, String tenantId, String projectId) {
+        return overridesFor(tenantId, projectId)
+                .getOrDefault(stageName, StageOverride.DEFAULT_ENABLED)
+                .enabled();
+    }
+
     private Map<String, StageOverride> overridesFor(String tenantId, String projectId) {
         String key = tenantId + "::" + projectId;
         CacheEntry entry = cache.get(key);
