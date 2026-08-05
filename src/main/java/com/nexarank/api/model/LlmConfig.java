@@ -37,6 +37,16 @@ public class LlmConfig {
     @Column(name = "prompt_template", columnDefinition = "TEXT")
     private String promptTemplate;
 
+    /**
+     * NR-124: optional extra HTTP headers for OPENAI_COMPATIBLE providers that
+     * need something beyond standard "Authorization: Bearer {apiKey}" — JSON
+     * object string, e.g. {"X-Custom-Header":"value"}. Null/blank for every
+     * other provider, including the common case of an OpenAI-compatible
+     * provider that only needs Bearer auth.
+     */
+    @Column(name = "custom_headers", columnDefinition = "TEXT")
+    private String customHeaders;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "last_status")
     private ConnectionStatus lastStatus = ConnectionStatus.UNTESTED;
@@ -53,7 +63,13 @@ public class LlmConfig {
     @Column(name = "updated_at")
     private Instant updatedAt = Instant.now();
 
-    public enum LlmProvider { OLLAMA, OPENAI, AZURE_OPENAI, ANTHROPIC, COHERE }
+    // NR-124: OPENAI_COMPATIBLE covers any provider exposing an OpenAI-shaped
+    // /chat/completions API (Groq, Together.ai, Mistral, DeepSeek, etc.) via
+    // GenericOpenAiCompatibleLlmAdapter — deliberately a new, distinct value
+    // rather than repurposing OPENAI/AZURE_OPENAI, which remain unimplemented
+    // named placeholders (see NR-124's Jira comment; not this ticket's scope
+    // to build bespoke adapters for them).
+    public enum LlmProvider { OLLAMA, OPENAI, AZURE_OPENAI, ANTHROPIC, COHERE, OPENAI_COMPATIBLE }
 
     public enum ConnectionStatus { UNTESTED, CONNECTED, FAILED }
 
@@ -85,6 +101,8 @@ public class LlmConfig {
     public void setTimeoutSeconds(int t)               { this.timeoutSeconds = t; }
     public String getPromptTemplate()                  { return promptTemplate; }
     public void setPromptTemplate(String p)            { this.promptTemplate = p; }
+    public String getCustomHeaders()                   { return customHeaders; }
+    public void setCustomHeaders(String h)             { this.customHeaders = h; }
     public ConnectionStatus getLastStatus()            { return lastStatus; }
     public void setLastStatus(ConnectionStatus s)      { this.lastStatus = s; }
     public String getLastStatusMessage()               { return lastStatusMessage; }
