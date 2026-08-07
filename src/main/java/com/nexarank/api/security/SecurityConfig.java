@@ -67,7 +67,9 @@ public class SecurityConfig {
                 // as sessions above, every real dashboard role.
                 .requestMatchers("/api/v1/auth/available-projects")
                         .hasAnyRole("STAKEHOLDER", "VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
-                .requestMatchers("/actuator/health").permitAll()
+                // observability: health + Prometheus scrape endpoint are open
+                // (metrics only, no secrets; scraped in-cluster by Prometheus)
+                .requestMatchers("/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
                 // rule enrichment — public, called by customer search services
                 .requestMatchers("/api/v1/rules/enrich").permitAll()
                 // content enrichment (NR-83) — public, called by customer storefronts

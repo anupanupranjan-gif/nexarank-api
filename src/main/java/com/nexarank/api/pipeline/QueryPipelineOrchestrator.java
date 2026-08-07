@@ -3,6 +3,8 @@ package com.nexarank.api.pipeline;
 
 import com.nexarank.api.model.EnrichedQuery;
 import com.nexarank.api.security.TenantContext;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -32,12 +34,23 @@ public class QueryPipelineOrchestrator {
     private final List<PipelineStage> postQueryStages;
     private final PipelineStageConfigService stageConfigService;
 
+    // Rules-only enrich latency SLI. Wraps the RULE_APPLICATION group (rule
+    // lookup, conflict resolution, DSL translation) — deliberately NOT the LLM
+    // stages (those live in PRE_QUERY), so the latency SLO stays stable
+    // regardless of whether an LLM stage is enabled per tenant/project.
+    private final Timer rulesTimer;
+
     // Spring injects all @Component PipelineStage beans automatically
-    public QueryPipelineOrchestrator(List<PipelineStage> allStages, PipelineStageConfigService stageConfigService) {
+    public QueryPipelineOrchestrator(List<PipelineStage> allStages, PipelineStageConfigService stageConfigService,
+                                     MeterRegistry meterRegistry) {
         this.preQueryStages  = sorted(allStages, PipelineStage.StageGroup.PRE_QUERY);
         this.ruleStages      = sorted(allStages, PipelineStage.StageGroup.RULE_APPLICATION);
         this.postQueryStages = sorted(allStages, PipelineStage.StageGroup.POST_QUERY);
         this.stageConfigService = stageConfigService;
+        this.rulesTimer = Timer.builder("nexarank.enrich.rules")
+            .description("Rules-only enrich latency (RULE_APPLICATION group; excludes LLM stages)")
+            .publishPercentileHistogram()
+            .register(meterRegistry);
         log.info("Pipeline stages loaded — pre={} rule={} post={}",
             names(preQueryStages), names(ruleStages), names(postQueryStages));
     }
@@ -68,7 +81,8 @@ public class QueryPipelineOrchestrator {
         runGroup(stageConfigService.applyOverrides(preQueryStages, tenantId, projectId), ctx);
 
         // RULE_APPLICATION — rule lookup, A/B, conflict resolution, DSL translation
-        runGroup(stageConfigService.applyOverrides(ruleStages, tenantId, projectId), ctx);
+        rulesTimer.record(() ->
+            runGroup(stageConfigService.applyOverrides(ruleStages, tenantId, projectId), ctx));
 
         // POST_QUERY — personalization, filtering, diversity (26d)
         runGroup(stageConfigService.applyOverrides(postQueryStages, tenantId, projectId), ctx);

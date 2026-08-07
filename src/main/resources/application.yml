@@ -45,10 +45,24 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   health:
     mail:
       enabled: false
+  metrics:
+    tags:
+      # common tag on every meter so dashboards/alerts can scope to this service
+      application: nexarank-api
+    distribution:
+      # publish histogram buckets so Prometheus can compute p95/p99 via
+      # histogram_quantile() for the enrich SLIs
+      percentiles-histogram:
+        http.server.requests: true
+        nexarank.enrich.rules: true
+      slo:
+        # rules-only enrich latency SLO boundaries (excludes LLM stages, which
+        # live in the PRE_QUERY group; this timer wraps RULE_APPLICATION only)
+        nexarank.enrich.rules: 10ms,25ms,50ms,100ms,250ms
 
 logging:
   level:

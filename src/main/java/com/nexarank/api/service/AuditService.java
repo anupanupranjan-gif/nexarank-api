@@ -55,6 +55,14 @@ public class AuditService {
             event.setCreatedAt(Instant.now());
 
             auditEventRepository.save(event);
+
+            // Structured, single-line audit marker for log-based observability
+            // (Loki "NexaRank Audit Log" dashboard). Every audit action lands
+            // here, so all lifecycle events are visible in logs uniformly — not
+            // just the few that services also log ad hoc.
+            log.info("AUDIT action={} entity={} id={} actor={} tenant={} project={}",
+                    action, entity, entityId, username,
+                    event.getTenantId(), event.getProjectId());
         } catch (Exception e) {
             log.warn("Failed to save audit event: {}", e.getMessage());
         }

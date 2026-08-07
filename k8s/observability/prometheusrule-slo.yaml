@@ -1,0 +1,99 @@
+# Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+#
+# NexaRank enrich-endpoint SLOs. Mirrors the structure of searchx-slo-alerts.
+# The Prometheus CR's ruleSelector requires label `release: kube-prometheus-stack`.
+#
+# SLOs:
+#   - Availability: 99.9% of /api/v1/rules/enrich responses are non-5xx.
+#   - Latency: rules-only enrich p99 < 50ms. This uses the custom
+#     `nexarank_enrich_rules_seconds` timer, which wraps ONLY the
+#     RULE_APPLICATION pipeline group — it deliberately excludes the LLM
+#     stages (PRE_QUERY group), whose latency is model/hardware-bound and
+#     would otherwise make a latency SLO meaningless wherever an LLM stage
+#     is enabled per tenant/project.
+#
+# Apply:
+#   kubectl apply -f k8s/observability/prometheusrule-slo.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: nexarank-api-slo-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: nexarank.slo
+      interval: 30s
+      rules:
+        # ── Latency SLO — rules-only enrich p99 < 50ms ──────────────────
+        - alert: NexaRankEnrichRulesLatencyP99Breached
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(nexarank_enrich_rules_seconds_bucket{application="nexarank-api"}[5m])) by (le)
+            ) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+            team: nexarank
+          annotations:
+            summary: "NexaRank rules-only enrich p99 latency breached 50ms SLO"
+            description: "Rules-only enrich p99 is {{ $value | humanizeDuration }} (SLO 50ms). Excludes LLM stages."
+
+        - alert: NexaRankEnrichRulesLatencyP99Critical
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(nexarank_enrich_rules_seconds_bucket{application="nexarank-api"}[5m])) by (le)
+            ) > 0.1
+          for: 5m
+          labels:
+            severity: critical
+            team: nexarank
+          annotations:
+            summary: "NexaRank rules-only enrich p99 latency exceeded 100ms"
+            description: "Rules-only enrich p99 is {{ $value | humanizeDuration }} — critical threshold breached."
+
+        # ── Availability SLO — 99.9% non-5xx on the enrich endpoint ─────
+        # NaN-safe: with zero traffic the ratio is NaN and the alert stays
+        # inactive rather than false-firing.
+        - alert: NexaRankEnrichAvailabilitySLOBreached
+          expr: |
+            (
+              sum(rate(http_server_requests_seconds_count{application="nexarank-api", uri="/api/v1/rules/enrich", status=~"5.."}[5m]))
+              /
+              sum(rate(http_server_requests_seconds_count{application="nexarank-api", uri="/api/v1/rules/enrich"}[5m]))
+            ) > 0.001
+          for: 5m
+          labels:
+            severity: critical
+            team: nexarank
+          annotations:
+            summary: "NexaRank enrich availability dropped below 99.9% SLO"
+            description: "Enrich 5xx error ratio is {{ $value | humanizePercentage }} over 5m (SLO: < 0.1%)."
+
+        # ── Error-budget fast burn ──────────────────────────────────────
+        - alert: NexaRankEnrichErrorBudgetBurnRateFast
+          expr: |
+            (
+              sum(rate(http_server_requests_seconds_count{application="nexarank-api", uri="/api/v1/rules/enrich", status=~"5.."}[1h]))
+              /
+              sum(rate(http_server_requests_seconds_count{application="nexarank-api", uri="/api/v1/rules/enrich"}[1h]))
+            ) > 0.02
+          for: 5m
+          labels:
+            severity: warning
+            team: nexarank
+          annotations:
+            summary: "NexaRank enrich error budget burning fast"
+            description: "Enrich 5xx ratio is {{ $value | humanizePercentage }} over 1h — error budget burning at high rate."
+
+        # ── Target down ─────────────────────────────────────────────────
+        - alert: NexaRankApiTargetDown
+          expr: up{service="nexarank-api"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            team: nexarank
+          annotations:
+            summary: "NexaRank API scrape target is down"
+            description: "Prometheus cannot scrape nexarank-api ({{ $labels.instance }}) — enrich metrics are unavailable."

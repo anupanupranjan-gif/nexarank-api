@@ -1,0 +1,31 @@
+# Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
+#
+# Makes the kube-prometheus-stack Prometheus scrape nexarank-api's
+# /actuator/prometheus endpoint. The Prometheus CR uses empty
+# serviceMonitor{,Namespace}Selector, so any ServiceMonitor in any
+# namespace is discovered; this one lives next to the Service it targets.
+#
+# Prereq: the nexarank-api Service must carry the label `app: nexarank-api`
+#   kubectl label svc nexarank-api app=nexarank-api -n default --overwrite
+#
+# Apply:
+#   kubectl apply -f k8s/observability/servicemonitor.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: nexarank-api
+  namespace: default
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: nexarank-api
+  namespaceSelector:
+    matchNames:
+      - default
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 30s
+      scrapeTimeout: 10s
