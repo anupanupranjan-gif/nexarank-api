@@ -7,6 +7,15 @@ import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.stereotype.Component;
 
+/**
+ * Tier 2 audit advices for non-rule entities.
+ *
+ * NR-70: MerchRule lifecycle auditing deliberately does NOT live here anymore.
+ * Tier 1 needs the rule's before-state to compute a field-level diff, which an
+ * around-advice on the service boundary can't see (the entity is already
+ * mutated by the time the advice runs), so those writes moved into
+ * MerchRuleService itself. Adding them back here would double-log every change.
+ */
 @Aspect
 @Component
 public class AuditAspect {
@@ -15,97 +24,6 @@ public class AuditAspect {
 
     public AuditAspect(AuditService auditService) {
         this.auditService = auditService;
-    }
-
-    @Around("execution(* com.nexarank.api.service.MerchRuleService.createRule(..))")
-    public Object auditCreateRule(ProceedingJoinPoint pjp) throws Throwable {
-        Object result = pjp.proceed();
-        try {
-            Object rule = result;
-            String id = (String) rule.getClass().getMethod("getId").invoke(rule);
-            String query = (String) rule.getClass().getMethod("getQuery").invoke(rule);
-            auditService.log("RULE_CREATED", "MerchRule", id, "query=" + query);
-        } catch (Exception ignored) {}
-        return result;
-    }
-
-    @Around("execution(* com.nexarank.api.service.MerchRuleService.updateRule(..))")
-    public Object auditUpdateRule(ProceedingJoinPoint pjp) throws Throwable {
-        Object result = pjp.proceed();
-        try {
-            if (result instanceof java.util.Optional<?> opt && opt.isPresent()) {
-                Object rule = opt.get();
-                String id = (String) rule.getClass().getMethod("getId").invoke(rule);
-                auditService.log("RULE_UPDATED", "MerchRule", id, null);
-            }
-        } catch (Exception ignored) {}
-        return result;
-    }
-
-    @Around("execution(* com.nexarank.api.service.MerchRuleService.submitForReview(..))")
-    public Object auditSubmitForReview(ProceedingJoinPoint pjp) throws Throwable {
-        Object[] args = pjp.getArgs();
-        Object result = pjp.proceed();
-        try {
-            String id = args.length > 0 ? args[0].toString() : "unknown";
-            auditService.log("RULE_SUBMITTED", "MerchRule", id, null);
-        } catch (Exception ignored) {}
-        return result;
-    }
-
-    @Around("execution(* com.nexarank.api.service.MerchRuleService.promoteToLive(..))")
-    public Object auditPromoteToLive(ProceedingJoinPoint pjp) throws Throwable {
-        Object[] args = pjp.getArgs();
-        Object result = pjp.proceed();
-        try {
-            String id = args.length > 0 ? args[0].toString() : "unknown";
-            auditService.log("RULE_PROMOTED_LIVE", "MerchRule", id, null);
-        } catch (Exception ignored) {}
-        return result;
-    }
-
-    @Around("execution(* com.nexarank.api.service.MerchRuleService.demoteFromLive(..))")
-    public Object auditDemoteFromLive(ProceedingJoinPoint pjp) throws Throwable {
-        Object[] args = pjp.getArgs();
-        Object result = pjp.proceed();
-        try {
-            String id = args.length > 0 ? args[0].toString() : "unknown";
-            auditService.log("RULE_DEMOTED", "MerchRule", id, null);
-        } catch (Exception ignored) {}
-        return result;
-    }
-
-    @Around("execution(* com.nexarank.api.service.MerchRuleService.approveRule(..))")
-    public Object auditApproveRule(ProceedingJoinPoint pjp) throws Throwable {
-        Object[] args = pjp.getArgs();
-        Object result = pjp.proceed();
-        try {
-            String id = args.length > 0 ? args[0].toString() : "unknown";
-            auditService.log("RULE_APPROVED", "MerchRule", id, null);
-        } catch (Exception ignored) {}
-        return result;
-    }
-
-    @Around("execution(* com.nexarank.api.service.MerchRuleService.rejectRule(..))")
-    public Object auditRejectRule(ProceedingJoinPoint pjp) throws Throwable {
-        Object[] args = pjp.getArgs();
-        Object result = pjp.proceed();
-        try {
-            String id = args.length > 0 ? args[0].toString() : "unknown";
-            auditService.log("RULE_REJECTED", "MerchRule", id, null);
-        } catch (Exception ignored) {}
-        return result;
-    }
-
-    @Around("execution(* com.nexarank.api.service.MerchRuleService.deleteRule(..))")
-    public Object auditDeleteRule(ProceedingJoinPoint pjp) throws Throwable {
-        Object[] args = pjp.getArgs();
-        Object result = pjp.proceed();
-        try {
-            String id = args.length > 0 ? args[0].toString() : "unknown";
-            auditService.log("RULE_DELETED", "MerchRule", id, null);
-        } catch (Exception ignored) {}
-        return result;
     }
 
     @Around("execution(* com.nexarank.api.service.UserService.createUser(..))")

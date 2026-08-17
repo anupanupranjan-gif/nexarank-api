@@ -34,6 +34,14 @@ public class Tenant {
     @Column(name = "allowed_origins")
     private String allowedOrigins;
 
+    /**
+     * NR-70: how long audit records are retained for this tenant before the
+     * scheduled purge removes them. Default 90 days; enterprise tenants are
+     * set to 365 via PUT /admin/tenants/{id}.
+     */
+    @Column(name = "audit_retention_days", nullable = false)
+    private int auditRetentionDays = 90;
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getDisplayName() { return displayName; }
@@ -50,4 +58,6 @@ public class Tenant {
     public void setAutoPublishRules(boolean autoPublishRules) { this.autoPublishRules = autoPublishRules; }
     public String getAllowedOrigins() { return allowedOrigins; }
     public void setAllowedOrigins(String allowedOrigins) { this.allowedOrigins = allowedOrigins; }
+    public int getAuditRetentionDays() { return auditRetentionDays; }
+    public void setAuditRetentionDays(int auditRetentionDays) { this.auditRetentionDays = auditRetentionDays; }
 }

@@ -31,6 +31,7 @@ public class MerchRuleService {
     private final RuleNotificationService notificationService;
     private final TenantRepository tenantRepository;
     private final AuditService auditService;
+    private final AuditDiffService auditDiffService;
     private final RulesCacheVersionService cacheVersionService;
 
     public MerchRuleService(MerchRuleRepository repository,
@@ -39,6 +40,7 @@ public class MerchRuleService {
                              RuleNotificationService notificationService,
                              TenantRepository tenantRepository,
                              AuditService auditService,
+                             AuditDiffService auditDiffService,
                              RulesCacheVersionService cacheVersionService) {
         this.repository     = repository;
         this.versionService = versionService;
@@ -46,6 +48,7 @@ public class MerchRuleService {
         this.notificationService = notificationService;
         this.tenantRepository = tenantRepository;
         this.auditService = auditService;
+        this.auditDiffService = auditDiffService;
         this.cacheVersionService = cacheVersionService;
     }
 
@@ -98,6 +101,7 @@ public class MerchRuleService {
         serializeTransientFields(rule);
         MerchRule saved = repository.save(rule);
         versionService.snapshot(saved, currentUser, "Rule created");
+        auditService.logRuleChange("RULE_CREATED", null, saved, null, currentUser);
         if (rule.getTriggerConditions() != null && !rule.getTriggerConditions().isEmpty()) {
             java.util.List<java.util.Map<String, Object>> dtos = rule.getTriggerConditions().stream()
                     .map(c -> { java.util.Map<String, Object> d = new java.util.HashMap<>();
@@ -136,6 +140,13 @@ public class MerchRuleService {
     public Optional<MerchRule> updateRule(String id, MerchRule updated) {
         validateRedirectUrl(updated);
         return repository.findById(id).map(existing -> {
+            // NR-70: detached snapshot taken before any mutation, so the audit
+            // diff compares real before/after state rather than one object with
+            // itself. Transient fields are deserialized first, otherwise
+            // synonyms/pinnedIds would read as null on the "before" side and
+            // every edit would look like it set them for the first time.
+            deserializeTransientFields(existing);
+            MerchRule beforeState = auditDiffService.copyOf(existing);
             updated.setId(existing.getId());
             updated.setTenantId(existing.getTenantId());
             updated.setProjectId(existing.getProjectId());
@@ -158,6 +169,7 @@ public class MerchRuleService {
             serializeTransientFields(updated);
             MerchRule saved = repository.save(updated);
             versionService.snapshot(saved, getCurrentUsername(), "Rule updated");
+            auditService.logRuleChange("RULE_UPDATED", beforeState, saved, null, getCurrentUsername());
             if (updated.getTriggerConditions() != null) {
                 java.util.List<java.util.Map<String, Object>> dtos = updated.getTriggerConditions().stream()
                         .map(c -> { java.util.Map<String, Object> d = new java.util.HashMap<>();
@@ -181,10 +193,12 @@ public class MerchRuleService {
                 throw new IllegalArgumentException(
                         "Only DRAFT rules can be submitted for review (current status: " + rule.getStatus() + ")");
             }
+            MerchRule beforeState = auditDiffService.copyOf(rule);
             rule.setStatus(MerchRule.RuleStatus.PENDING_REVIEW);
             rule.setUpdatedAt(Instant.now());
             MerchRule saved = repository.save(rule);
             versionService.snapshot(saved, currentUser, "Submitted for review");
+            auditService.logRuleChange("RULE_SUBMITTED", beforeState, saved, null, currentUser);
             log.info("RULE_SUBMITTED id={} query={} by={}", rule.getId(), rule.getQuery(), currentUser);
             cacheVersionService.bump(saved.getTenantId(), saved.getProjectId());
             notificationService.notifySubmitted(saved);
@@ -202,11 +216,13 @@ public class MerchRuleService {
     public Optional<MerchRule> approveRule(String id, String comment, boolean publishNow) {
         String currentUser = getCurrentUsername();
         return repository.findById(id).map(rule -> {
+            MerchRule beforeState = auditDiffService.copyOf(rule);
             rule.setStatus(MerchRule.RuleStatus.APPROVED);
             rule.setApprovedBy(currentUser);
             rule.setReviewComment(comment);
             rule.setUpdatedAt(Instant.now());
             MerchRule saved = repository.save(rule);
+            auditService.logRuleChange("RULE_APPROVED", beforeState, saved, comment, currentUser);
             versionService.snapshot(saved, currentUser,
                     comment == null || comment.isBlank() ? "Rule approved" : "Rule approved: " + comment);
             log.info("RULE_APPROVED id={} query={} by={} comment={}", rule.getId(), rule.getQuery(), rule.getApprovedBy(), comment);
@@ -271,11 +287,13 @@ public class MerchRuleService {
                 throw new IllegalArgumentException(
                         "Only LIVE rules can be demoted (current status: " + rule.getStatus() + ")");
             }
+            MerchRule beforeState = auditDiffService.copyOf(rule);
             rule.setStatus(target);
             rule.setEnabled(false);
             rule.setUpdatedAt(Instant.now());
             MerchRule saved = repository.save(rule);
             versionService.snapshot(saved, currentUser, "Reverted from live to " + target);
+            auditService.logRuleChange("RULE_DEMOTED", beforeState, saved, null, currentUser);
             log.info("RULE_DEMOTED id={} query={} to={} by={}", rule.getId(), rule.getQuery(), target, currentUser);
             cacheVersionService.bump(saved.getTenantId(), saved.getProjectId());
             return saved;
@@ -283,11 +301,15 @@ public class MerchRuleService {
     }
 
     private MerchRule doPromoteToLive(MerchRule rule, String actor, String versionNote) {
+        MerchRule beforeState = auditDiffService.copyOf(rule);
         rule.setStatus(MerchRule.RuleStatus.LIVE);
         rule.setEnabled(true);
         rule.setUpdatedAt(Instant.now());
         MerchRule saved = repository.save(rule);
         versionService.snapshot(saved, actor, versionNote);
+        // Single choke point for every APPROVED -> LIVE path (auto-publish,
+        // approve-and-publish, and manual promote), so none can bypass the audit.
+        auditService.logRuleChange("RULE_PROMOTED_LIVE", beforeState, saved, versionNote, actor);
         cacheVersionService.bump(saved.getTenantId(), saved.getProjectId());
         return saved;
     }
@@ -300,12 +322,14 @@ public class MerchRuleService {
     public Optional<MerchRule> rejectRule(String id, String comment) {
         String currentUser = getCurrentUsername();
         return repository.findById(id).map(rule -> {
+            MerchRule beforeState = auditDiffService.copyOf(rule);
             rule.setStatus(MerchRule.RuleStatus.DRAFT);
             rule.setEnabled(false);
             rule.setApprovedBy(currentUser);
             rule.setReviewComment(comment);
             rule.setUpdatedAt(Instant.now());
             MerchRule saved = repository.save(rule);
+            auditService.logRuleChange("RULE_REJECTED", beforeState, saved, comment, currentUser);
             versionService.snapshot(saved, currentUser,
                     comment == null || comment.isBlank() ? "Rule rejected" : "Rule rejected: " + comment);
             log.info("RULE_REJECTED id={} query={} by={} comment={}", rule.getId(), rule.getQuery(), rule.getApprovedBy(), comment);
@@ -317,17 +341,24 @@ public class MerchRuleService {
 
     public Optional<MerchRule> toggleRule(String id) {
         return repository.findById(id).map(rule -> {
+            MerchRule beforeState = auditDiffService.copyOf(rule);
             rule.setEnabled(!rule.isEnabled());
             rule.setUpdatedAt(Instant.now());
             MerchRule saved = repository.save(rule);
+            auditService.logRuleChange("RULE_TOGGLED", beforeState, saved, null, getCurrentUsername());
             cacheVersionService.bump(saved.getTenantId(), saved.getProjectId());
             return saved;
         });
     }
 
     public void deleteRule(String id) {
-        repository.findById(id).ifPresent(rule ->
-                cacheVersionService.bump(rule.getTenantId(), rule.getProjectId()));
+        repository.findById(id).ifPresent(rule -> {
+            // Logged before the row is gone. entity_name is denormalized at
+            // write time, so this entry stays readable after the rule itself
+            // no longer exists to join against.
+            auditService.logRuleChange("RULE_DELETED", rule, null, null, getCurrentUsername());
+            cacheVersionService.bump(rule.getTenantId(), rule.getProjectId());
+        });
         repository.deleteById(id);
     }
 

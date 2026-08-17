@@ -49,7 +49,12 @@ public class ProjectAccessService {
         this.projectRepository = projectRepository;
     }
 
-    private boolean isTenantWide(User user) {
+    /**
+     * NR-70: made public so the audit log can distinguish tenant-wide readers
+     * from project-scoped ones. Read visibility is a different question from
+     * activation eligibility (see AuditQueryService.visibleProjectIds).
+     */
+    public boolean isTenantWide(User user) {
         return TENANT_WIDE_ROLES.contains(user.getRole());
     }
 

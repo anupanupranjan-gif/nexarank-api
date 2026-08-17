@@ -10,6 +10,7 @@ import com.nexarank.api.repository.UserGroupMembershipRepository;
 import java.util.List;
 import java.util.stream.Collectors;
 import com.nexarank.api.security.JwtUtil;
+import com.nexarank.api.service.ApiAccessLogService;
 import com.nexarank.api.service.ProjectAccessService;
 import com.nexarank.api.service.RefreshTokenService;
 import com.nexarank.api.service.UserService;
@@ -52,6 +53,7 @@ public class AuthController {
     private final UserGroupMembershipRepository membershipRepository;
     private final RefreshTokenService refreshTokenService;
     private final ProjectAccessService projectAccessService;
+    private final ApiAccessLogService apiAccessLogService;
     private final ProjectRepository projectRepository;
 
     @Value("${nexarank.cookie.secure:false}")
@@ -63,7 +65,8 @@ public class AuthController {
                           UserGroupMembershipRepository membershipRepository,
                           RefreshTokenService refreshTokenService,
                           ProjectAccessService projectAccessService,
-                          ProjectRepository projectRepository) {
+                          ProjectRepository projectRepository,
+                          ApiAccessLogService apiAccessLogService) {
         this.userService = userService;
         this.jwtUtil = jwtUtil;
         this.userGroupRepository = userGroupRepository;
@@ -71,6 +74,7 @@ public class AuthController {
         this.membershipRepository = membershipRepository;
         this.refreshTokenService = refreshTokenService;
         this.projectAccessService = projectAccessService;
+        this.apiAccessLogService = apiAccessLogService;
         this.projectRepository = projectRepository;
     }
 
@@ -106,6 +110,14 @@ public class AuthController {
                 .filter(user -> userService.validatePassword(password, user.getPassword()))
                 .filter(User::isEnabled);
         if (match.isEmpty()) {
+            // NR-70 Tier 2: recorded whether or not the username exists —
+            // repeated failures against unknown accounts are exactly the
+            // enumeration signal this log exists to surface. The response
+            // itself stays deliberately generic.
+            apiAccessLogService.recordAuthFailure(
+                    userService.findByUsername(username).map(User::getTenantId).orElse(null),
+                    username, "/api/v1/auth/login", clientIp(request),
+                    "Invalid credentials or account disabled");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Invalid username or password"));
         }
         User user = match.get();

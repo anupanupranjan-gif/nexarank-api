@@ -135,7 +135,14 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/search-quality/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/v1/search-quality/run").hasRole("ADMIN")
                 .requestMatchers("/api/v1/engine-config/**").hasRole("ADMIN")
-                .requestMatchers("/api/v1/audit/**").hasRole("ADMIN")
+                // NR-70: Tier 1 (rule-change history) is visible to MERCHANDISER and
+                // above and is project-scoped inside AuditQueryService via
+                // user_projects. Everything else under /audit stays Tier 2 /
+                // ADMIN-only — approval reasons, API access patterns and auth
+                // failures are security-posture data, least privilege.
+                .requestMatchers("/api/v1/audit/rule-changes/**")
+                    .hasAnyRole("MERCHANDISER", "APPROVER", "ADMIN", "TENANT_ADMIN", "SUPER_ADMIN")
+                .requestMatchers("/api/v1/audit/**").hasAnyRole("ADMIN", "TENANT_ADMIN", "SUPER_ADMIN")
                 .requestMatchers("/api/v1/analytics/**").hasAnyRole("ADMIN", "APPROVER", "MERCHANDISER", "VIEWER")
                 .requestMatchers("/api/v1/judgments/**").hasAnyRole("ADMIN", "APPROVER", "MERCHANDISER")
                 .requestMatchers(HttpMethod.GET, "/api/v1/ab-tests/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")

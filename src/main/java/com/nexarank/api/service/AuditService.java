@@ -2,6 +2,7 @@
 package com.nexarank.api.service;
 
 import com.nexarank.api.model.AuditEvent;
+import com.nexarank.api.model.MerchRule;
 import com.nexarank.api.repository.AuditEventRepository;
 import com.nexarank.api.security.TenantContext;
 import org.slf4j.Logger;
@@ -21,9 +22,11 @@ public class AuditService {
 
     private static final Logger log = LoggerFactory.getLogger(AuditService.class);
     private final AuditEventRepository auditEventRepository;
+    private final AuditDiffService diffService;
 
-    public AuditService(AuditEventRepository auditEventRepository) {
+    public AuditService(AuditEventRepository auditEventRepository, AuditDiffService diffService) {
         this.auditEventRepository = auditEventRepository;
+        this.diffService = diffService;
     }
 
     public void log(String action, String entity, String entityId, String details) {
@@ -41,10 +44,72 @@ public class AuditService {
         save(action, entity, entityId, details, "system");
     }
 
+    /**
+     * NR-70 Tier 1: a rule state change, with the rule's display name
+     * denormalized at write time and a structural field-level diff attached.
+     *
+     * Never throws — an audit write must not be able to fail the business
+     * operation it records (same contract the Tier 2 path has always had).
+     *
+     * @param before rule state prior to the change, or null for create/delete
+     * @param after  rule state after the change, or null for delete
+     */
+    public void logRuleChange(String action, MerchRule before, MerchRule after,
+                              String reason, String actor) {
+        try {
+            MerchRule subject = after != null ? after : before;
+            if (subject == null) return;
+
+            AuditEvent event = new AuditEvent();
+            event.setId(UUID.randomUUID().toString());
+            event.setTier(1);
+            event.setTenantId(subject.getTenantId() != null
+                    ? subject.getTenantId() : TenantContext.getTenantId());
+            event.setProjectId(subject.getProjectId() != null
+                    ? subject.getProjectId() : TenantContext.getProjectId());
+            event.setUsername(actor);
+            event.setAction(action);
+            event.setEntity("MerchRule");
+            event.setEntityId(subject.getId());
+            event.setEntityName(displayName(subject));
+            event.setPreviousState(before != null && before.getStatus() != null
+                    ? before.getStatus().name() : null);
+            event.setNewState(after != null && after.getStatus() != null
+                    ? after.getStatus().name() : null);
+            event.setReason(reason);
+
+            var changes = diffService.diff(before, after);
+            event.setFieldDiff(diffService.toJson(changes));
+            event.setDetails(diffService.toSummary(changes));
+            event.setCreatedAt(Instant.now());
+
+            auditEventRepository.save(event);
+
+            log.info("AUDIT action={} entity=MerchRule id={} name={} actor={} tenant={} project={} tier=1",
+                    action, subject.getId(), event.getEntityName(), actor,
+                    event.getTenantId(), event.getProjectId());
+        } catch (Exception e) {
+            log.warn("Failed to save tier-1 audit event: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * MerchRule has no dedicated name field, so the display label follows the
+     * same "[TYPE] query" convention already used in the rules table and in
+     * NR-119's A/B test variant summaries.
+     */
+    private String displayName(MerchRule rule) {
+        String type = rule.getType() != null ? rule.getType().name() : "RULE";
+        String query = rule.getQuery() != null && !rule.getQuery().isBlank()
+                ? rule.getQuery() : "(all queries)";
+        return type + " " + query;
+    }
+
     private void save(String action, String entity, String entityId, String details, String username) {
         try {
             AuditEvent event = new AuditEvent();
             event.setId(UUID.randomUUID().toString());
+            event.setTier(2);
             event.setTenantId(TenantContext.getTenantId());
             event.setProjectId(TenantContext.getProjectId());
             event.setUsername(username);
