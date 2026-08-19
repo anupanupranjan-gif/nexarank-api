@@ -23,7 +23,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "loki"
+        "uid": "${DS_LOKI}"
       },
       "gridPos": {
         "h": 8,
@@ -46,7 +46,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "loki"
+            "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
           "expr": "{namespace=\"default\", app=\"nexarank-api\"} |= \"AUDIT\"",
@@ -60,7 +60,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "loki"
+        "uid": "${DS_LOKI}"
       },
       "gridPos": {
         "h": 8,
@@ -83,7 +83,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "loki"
+            "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
           "expr": "{namespace=\"default\", app=\"nexarank-api\"} |= \"AUDIT\" |= \"action=RULE_APPROVED\"",
@@ -97,7 +97,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "loki"
+        "uid": "${DS_LOKI}"
       },
       "gridPos": {
         "h": 8,
@@ -120,7 +120,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "loki"
+            "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
           "expr": "{namespace=\"default\", app=\"nexarank-api\"} |= \"AUDIT\" |= \"action=RULE_REJECTED\"",
@@ -134,7 +134,7 @@
     {
       "datasource": {
         "type": "loki",
-        "uid": "loki"
+        "uid": "${DS_LOKI}"
       },
       "gridPos": {
         "h": 8,
@@ -157,7 +157,7 @@
         {
           "datasource": {
             "type": "loki",
-            "uid": "loki"
+            "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
           "expr": "{namespace=\"default\", app=\"nexarank-api\"} |= \"AUDIT\" |~ \"action=RULE_\"",
@@ -172,7 +172,15 @@
   "schemaVersion": 39,
   "tags": [],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "name": "DS_LOKI",
+        "type": "datasource",
+        "query": "loki",
+        "hide": 0,
+        "current": {}
+      }
+    ]
   },
   "time": {
     "from": "now-7d",

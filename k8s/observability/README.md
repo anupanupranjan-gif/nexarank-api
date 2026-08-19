@@ -12,6 +12,18 @@ Prometheus/Grafana wiring for nexarank-api. nexarank-api is deployed with
 | `prometheusrule-slo.yaml` | SLO alerts: 99.9% enrich availability + rules-only p99 < 50ms latency. |
 | `dashboards/nexarank-slo.json` | Grafana "NexaRank SLO Dashboard" (RED + SLO). |
 | `dashboards/cfmw9rjz38irkf.json` | Grafana "NexaRank Audit Log" (Loki, log-based). |
+| `dashboards/configmap.yaml` | Provisions both dashboards into Grafana via the kube-prometheus-stack sidecar (`grafana_dashboard: "1"` label) — see below. |
+
+**⚠ 2026-08-19 fix — hardcoded datasource UIDs (recurring fragility):** both
+dashboard JSON files used to hardcode `"uid": "loki"` / `"uid": "prometheus"`.
+That's exactly the failure mode documented in `SearchX Platform — Build
+Journal v18` ("stale datasource entries... 10 custom dashboards pointing at
+dead uids") — a fresh Loki/Prometheus install assigns a different auto-
+generated UID and the panels silently break. Both dashboards now use proper
+Grafana template datasource variables (`${DS_LOKI}` / `${DS_PROMETHEUS}`,
+declared in each dashboard's own `templating.list`) instead, which
+Grafana resolves to whichever datasource of that type exists — resilient
+across rebuilds regardless of what UID gets assigned.
 
 ## Apply
 
@@ -19,9 +31,13 @@ Prometheus/Grafana wiring for nexarank-api. nexarank-api is deployed with
 kubectl label svc nexarank-api app=nexarank-api -n default --overwrite
 kubectl apply -f servicemonitor.yaml
 kubectl apply -f prometheusrule-slo.yaml
-# dashboards: import the JSON via Grafana UI or API (they are stored in
-# Grafana's own DB, not provisioned from a ConfigMap in this cluster).
+kubectl apply -f dashboards/configmap.yaml
 ```
+
+Dashboards are now provisioned declaratively (ConfigMap + sidecar) rather
+than manually imported via the Grafana UI/API — the old manual-import step
+was itself a form of the "lost on rebuild" fragility this directory exists
+to avoid.
 
 The app side is already wired: `micrometer-registry-prometheus` on the
 classpath, `management.endpoints.web.exposure.include` contains

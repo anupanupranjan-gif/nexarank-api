@@ -6,7 +6,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -52,7 +52,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(rate(http_server_requests_seconds_count{application=\"nexarank-api\", uri=\"/api/v1/rules/enrich\", status!~\"5..\"}[5m])) / sum(rate(http_server_requests_seconds_count{application=\"nexarank-api\", uri=\"/api/v1/rules/enrich\"}[5m]))",
           "refId": "A"
@@ -64,7 +64,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -110,7 +110,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "histogram_quantile(0.99, sum(rate(nexarank_enrich_rules_seconds_bucket{application=\"nexarank-api\"}[5m])) by (le))",
           "refId": "A"
@@ -122,7 +122,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -160,7 +160,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(rate(http_server_requests_seconds_count{application=\"nexarank-api\", uri=\"/api/v1/rules/enrich\"}[5m]))",
           "refId": "A"
@@ -172,7 +172,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -229,7 +229,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "max(up{service=\"nexarank-api\"})",
           "refId": "A"
@@ -241,7 +241,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -278,7 +278,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum by (status) (rate(http_server_requests_seconds_count{application=\"nexarank-api\", uri=\"/api/v1/rules/enrich\"}[5m]))",
           "legendFormat": "{{status}}",
@@ -291,7 +291,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -328,7 +328,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "sum(rate(http_server_requests_seconds_count{application=\"nexarank-api\", uri=\"/api/v1/rules/enrich\", status!~\"5..\"}[5m])) / sum(rate(http_server_requests_seconds_count{application=\"nexarank-api\", uri=\"/api/v1/rules/enrich\"}[5m]))",
           "legendFormat": "availability",
@@ -341,7 +341,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -378,7 +378,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "histogram_quantile(0.50, sum(rate(nexarank_enrich_rules_seconds_bucket{application=\"nexarank-api\"}[5m])) by (le))",
           "legendFormat": "p50",
@@ -387,7 +387,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "histogram_quantile(0.95, sum(rate(nexarank_enrich_rules_seconds_bucket{application=\"nexarank-api\"}[5m])) by (le))",
           "legendFormat": "p95",
@@ -396,7 +396,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "histogram_quantile(0.99, sum(rate(nexarank_enrich_rules_seconds_bucket{application=\"nexarank-api\"}[5m])) by (le))",
           "legendFormat": "p99",
@@ -409,7 +409,7 @@
     {
       "datasource": {
         "type": "prometheus",
-        "uid": "prometheus"
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -446,7 +446,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{application=\"nexarank-api\", uri=\"/api/v1/rules/enrich\"}[5m])) by (le))",
           "legendFormat": "p95 total",
@@ -455,7 +455,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "${DS_PROMETHEUS}"
           },
           "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{application=\"nexarank-api\", uri=\"/api/v1/rules/enrich\"}[5m])) by (le))",
           "legendFormat": "p99 total",
@@ -473,7 +473,15 @@
     "slo"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "hide": 0,
+        "current": {}
+      }
+    ]
   },
   "time": {
     "from": "now-1h",
