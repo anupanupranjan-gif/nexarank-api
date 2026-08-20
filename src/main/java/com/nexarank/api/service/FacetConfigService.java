@@ -71,8 +71,16 @@ public class FacetConfigService {
         if (repository.count() > 0) return;
 
         String[][] defaults = {
-            {"category",  "Category",      "TERMS",   "1", "10",  null,    null,   null,  "true"},
-            {"brand",     "Brand",         "TERMS",   "2", "10",  null,    null,   null,  "true"},
+            // .keyword: ES's default dynamic mapping makes string fields analyzed
+            // "text" with a "fielddata: false" (default) sibling "keyword" multi-field.
+            // A terms aggregation directly against the bare text field either errors
+            // ("Fielddata is disabled on text fields by default") or, if fielddata is
+            // force-enabled, buckets by individual tokens instead of whole values -
+            // found live 2026-08-20 (nexarank/rebuild session) when this exact bug
+            // silently broke Facet Manager + TriggerConditionBuilder for a from-scratch
+            // tenant using search-catalog-indexer's stock ES mapping.
+            {"category.keyword",  "Category",      "TERMS",   "1", "10",  null,    null,   null,  "true"},
+            {"brand.keyword",     "Brand",         "TERMS",   "2", "10",  null,    null,   null,  "true"},
             {"price",     "Price Range",   "RANGE",   "3", null,  "0",     "500",  "50",  "false"},
             {"rating",    "Avg. Rating",   "RANGE",   "4", null,  "0",     "5",    "1",   "false"},
         };
