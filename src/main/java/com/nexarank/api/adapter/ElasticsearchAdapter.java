@@ -81,6 +81,34 @@ public class ElasticsearchAdapter implements SearchEnginePort {
                                   type.equals("float") ||
                                   type.equals("date"));
                 fields.add(field);
+
+                // ES's default dynamic mapping adds a "keyword" multi-field under
+                // analyzed text fields (e.g. category -> category.keyword) so exact
+                // TermQuery/aggregations work. Without surfacing these, Boost Field
+                // and any other keyword-only picker in the UI has nothing to show
+                // for text fields like category/brand.
+                JsonNode subFields = fieldDef.path("fields");
+                subFields.fields().forEachRemaining(subEntry -> {
+                    String subName = subEntry.getKey();
+                    JsonNode subDef = subEntry.getValue();
+                    String subType = subDef.path("type").asText("object");
+
+                    SearchField subField = new SearchField();
+                    subField.setName(name + "." + subName);
+                    subField.setType(subType);
+                    subField.setIndexed(true);
+                    subField.setStored(false);
+                    subField.setFacetable(subType.equals("keyword") ||
+                                          subType.equals("boolean") ||
+                                          subType.equals("integer") ||
+                                          subType.equals("float") ||
+                                          subType.equals("double"));
+                    subField.setSortable(subType.equals("keyword") ||
+                                         subType.equals("integer") ||
+                                         subType.equals("float") ||
+                                         subType.equals("date"));
+                    fields.add(subField);
+                });
             });
 
             log.info("Fetched {} fields from ES index {}", fields.size(), config.getIndexName());
