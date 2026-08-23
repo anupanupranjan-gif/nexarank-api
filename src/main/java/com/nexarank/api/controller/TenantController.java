@@ -120,6 +120,27 @@ public class TenantController {
                             "Unknown region: " + body.get("region") + " (expected US, EU, or APAC)"));
                 }
             }
+            // NR-155: was a real column with no way to actually set it - the data
+            // model already supported a different retention window per tenant
+            // (needed since regulatory minimums/maximums differ by jurisdiction/
+            // industry), but nothing exposed it. Which specific number a given
+            // tenant needs is a legal/product call (see NR-140/141), not something
+            // to hardcode here - this only enforces sane bounds (positive, capped
+            // at 10 years) so the field can't be set to something nonsensical.
+            if (body.containsKey("auditRetentionDays")) {
+                int days;
+                try {
+                    days = Integer.parseInt(body.get("auditRetentionDays"));
+                } catch (NumberFormatException e) {
+                    return ResponseEntity.badRequest().body(Map.of("error",
+                            "auditRetentionDays must be an integer"));
+                }
+                if (days < 1 || days > 3650) {
+                    return ResponseEntity.badRequest().body(Map.of("error",
+                            "auditRetentionDays must be between 1 and 3650 days"));
+                }
+                tenant.setAuditRetentionDays(days);
+            }
             return ResponseEntity.ok(tenantRepository.save(tenant));
         }).orElse(ResponseEntity.notFound().build());
     }
