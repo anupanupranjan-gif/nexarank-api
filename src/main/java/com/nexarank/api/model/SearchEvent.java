@@ -1,6 +1,8 @@
 // Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 package com.nexarank.api.model;
 
+import com.nexarank.api.compliance.Pii;
+import com.nexarank.api.compliance.PiiCategory;
 import jakarta.persistence.*;
 import java.time.Instant;
 
@@ -17,6 +19,7 @@ public class SearchEvent {
     @Column(name = "project_id", nullable = false)
     private String projectId;
 
+    @Pii(PiiCategory.PSEUDONYMOUS_ID)
     @Column(name = "session_id")
     private String sessionId;
 

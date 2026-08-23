@@ -2,6 +2,8 @@
 package com.nexarank.api.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.nexarank.api.compliance.Pii;
+import com.nexarank.api.compliance.PiiCategory;
 import jakarta.persistence.*;
 import java.time.Instant;
 
@@ -15,16 +17,20 @@ public class User {
     @Column(name = "tenant_id", nullable = false)
     private String tenantId;
 
+    @Pii(value = PiiCategory.DIRECT_IDENTIFIER, note = "login identifier, often a real name or work email alias")
     @Column(nullable = false)
     private String username;
 
+    @Pii(value = PiiCategory.CREDENTIAL, note = "bcrypt hash, not plaintext, still access-granting")
     @JsonIgnore
     @Column(nullable = false)
     private String password;
 
+    @Pii(PiiCategory.CONTACT_INFO)
     @Column
     private String email;
 
+    @Pii(PiiCategory.DIRECT_IDENTIFIER)
     @Column(name = "display_name")
     private String displayName;
 

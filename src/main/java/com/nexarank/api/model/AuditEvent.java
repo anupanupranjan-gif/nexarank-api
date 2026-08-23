@@ -1,6 +1,8 @@
 // Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 package com.nexarank.api.model;
 
+import com.nexarank.api.compliance.Pii;
+import com.nexarank.api.compliance.PiiCategory;
 import jakarta.persistence.*;
 import java.time.Instant;
 
@@ -20,6 +22,7 @@ public class AuditEvent {
     @Column(name = "user_id")
     private String userId;
 
+    @Pii(PiiCategory.DIRECT_IDENTIFIER)
     @Column(name = "username")
     private String username;
 
@@ -35,6 +38,7 @@ public class AuditEvent {
     @Column(columnDefinition = "TEXT")
     private String details;
 
+    @Pii(PiiCategory.IP_ADDRESS)
     @Column(name = "ip_address")
     private String ipAddress;
 

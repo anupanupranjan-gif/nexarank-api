@@ -1,6 +1,8 @@
 // Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 package com.nexarank.api.model;
 
+import com.nexarank.api.compliance.Pii;
+import com.nexarank.api.compliance.PiiCategory;
 import jakarta.persistence.*;
 
 import java.time.Instant;
@@ -21,9 +23,11 @@ public class RefreshToken {
     @Column(name = "token_hash", nullable = false)
     private String tokenHash;
 
+    @Pii(PiiCategory.OTHER_SENSITIVE)
     @Column(name = "device_info")
     private String deviceInfo;
 
+    @Pii(PiiCategory.IP_ADDRESS)
     @Column(name = "ip_address")
     private String ipAddress;
 

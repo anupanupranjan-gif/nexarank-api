@@ -1,6 +1,8 @@
 // Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 package com.nexarank.api.model;
 
+import com.nexarank.api.compliance.Pii;
+import com.nexarank.api.compliance.PiiCategory;
 import jakarta.persistence.*;
 import java.time.Instant;
 
@@ -33,6 +35,7 @@ public class ApiAccessEvent {
     @Column(name = "user_id")
     private String userId;
 
+    @Pii(PiiCategory.DIRECT_IDENTIFIER)
     @Column(name = "username")
     private String username;
 
@@ -46,6 +49,7 @@ public class ApiAccessEvent {
     @Column(name = "http_method")
     private String httpMethod;
 
+    @Pii(value = PiiCategory.OTHER_SENSITIVE, note = "known secret param names are redacted by ApiAccessLogFilter before persisting, but arbitrary request params otherwise pass through unfiltered")
     @Column(columnDefinition = "TEXT")
     private String params;
 
@@ -55,6 +59,7 @@ public class ApiAccessEvent {
     @Column(name = "latency_ms")
     private Long latencyMs;
 
+    @Pii(PiiCategory.IP_ADDRESS)
     @Column(name = "ip_address")
     private String ipAddress;
 
