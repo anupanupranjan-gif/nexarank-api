@@ -167,7 +167,16 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/v1/signals/**").hasAnyRole("MERCHANDISER", "APPROVER", "ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/signals/**").hasAnyRole("APPROVER", "ADMIN")
                 .requestMatchers("/api/v1/reports/**").hasRole("ADMIN")
-                .anyRequest().authenticated()   // ← add this line
+                // NR-155: verified every real @RequestMapping in this codebase
+                // (150 mappings, all controllers) already has an explicit matcher
+                // above - this catch-all was dead code for anything that exists
+                // today, but "authenticated()" as a default means the next
+                // endpoint someone forgets to add a matcher for silently opens to
+                // ANY authenticated user regardless of role, not fails closed.
+                // That's the wrong default for least-privilege/HIPAA
+                // minimum-necessary: deny-by-default means a missing matcher is a
+                // loud 403 during testing, not a quiet over-grant in production.
+                .anyRequest().denyAll()
 
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
