@@ -70,7 +70,7 @@ logging:
 
 nexarank:
   jwt:
-    secret: ${JWT_SECRET:nexarank-dev-secret-key-2026-minimum-32-chars}
+    secret: ${JWT_SECRET}
     # NR-120: access tokens are now short-lived (15 min default); session
     # longevity comes from the separate, revocable refresh token instead.
     expiration-ms: ${JWT_EXPIRATION_MS:900000}
