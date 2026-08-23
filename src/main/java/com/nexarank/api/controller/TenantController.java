@@ -112,6 +112,14 @@ public class TenantController {
             // origin(s) — lets a future tenant's browser-facing integration be
             // enabled with a data change here, not a code change/redeploy.
             if (body.containsKey("allowedOrigins")) tenant.setAllowedOrigins(body.get("allowedOrigins"));
+            if (body.containsKey("region")) {
+                try {
+                    tenant.setRegion(com.nexarank.api.model.TenantRegion.valueOf(body.get("region").toUpperCase()));
+                } catch (IllegalArgumentException e) {
+                    return ResponseEntity.badRequest().body(Map.of("error",
+                            "Unknown region: " + body.get("region") + " (expected US, EU, or APAC)"));
+                }
+            }
             return ResponseEntity.ok(tenantRepository.save(tenant));
         }).orElse(ResponseEntity.notFound().build());
     }

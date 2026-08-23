@@ -42,6 +42,16 @@ public class Tenant {
     @Column(name = "audit_retention_days", nullable = false)
     private int auditRetentionDays = 90;
 
+    /**
+     * NR-155: data residency — which region this tenant's data is pinned to.
+     * Not yet enforced by physical data placement (this cluster is
+     * single-region); the capability exists so a tenant can be scoped
+     * without a re-architecture once real multi-region infrastructure exists.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "region", nullable = false)
+    private TenantRegion region = TenantRegion.US;
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getDisplayName() { return displayName; }
@@ -60,4 +70,6 @@ public class Tenant {
     public void setAllowedOrigins(String allowedOrigins) { this.allowedOrigins = allowedOrigins; }
     public int getAuditRetentionDays() { return auditRetentionDays; }
     public void setAuditRetentionDays(int auditRetentionDays) { this.auditRetentionDays = auditRetentionDays; }
+    public TenantRegion getRegion() { return region; }
+    public void setRegion(TenantRegion region) { this.region = region; }
 }

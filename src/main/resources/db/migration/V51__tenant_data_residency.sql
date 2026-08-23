@@ -1,0 +1,14 @@
+-- NR-155: data residency support - the ability to pin a tenant's data to a
+-- specific region. Required for EU/APAC localization (China PIPL, India
+-- DPDPA) and increasingly asked for in EU enterprise deals; the single most
+-- likely architectural blocker if not designed for early, per the ticket.
+--
+-- This is the application-layer capability (a tenant can be tagged with a
+-- region) — not physical multi-region data placement, which is real
+-- infrastructure work (separate Postgres/ES per region, routing) that stays
+-- out of scope here on purpose, same as the rest of NR-155's "foundations,
+-- not the certification itself" framing. Default 'US' for every existing
+-- tenant: this cluster runs single-region today, so it's a label meaning
+-- "no residency requirement asserted yet," not a claim about where data
+-- currently lives.
+ALTER TABLE tenants ADD COLUMN region VARCHAR(20) NOT NULL DEFAULT 'US';
