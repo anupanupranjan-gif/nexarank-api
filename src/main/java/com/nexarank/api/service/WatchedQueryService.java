@@ -6,6 +6,7 @@ import com.nexarank.api.repository.WatchedQueryRepository;
 import com.nexarank.api.security.TenantContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
@@ -49,6 +50,14 @@ public class WatchedQueryService {
         return repository.save(wq);
     }
 
+    /**
+     * A derived delete-query repository method executes as a real "find,
+     * then EntityManager.remove() each result" sequence under the hood -
+     * without an open transaction wrapping this call, it threw
+     * TransactionRequiredException on every attempt, regardless of who
+     * called it (this was a 500, not a permission issue).
+     */
+    @Transactional
     public void delete(String id) {
         repository.deleteByTenantIdAndProjectIdAndId(
             TenantContext.getTenantId(), TenantContext.getProjectId(), id);
