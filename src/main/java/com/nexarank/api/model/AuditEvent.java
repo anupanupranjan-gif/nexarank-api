@@ -69,6 +69,23 @@ public class AuditEvent {
     @Column(name = "reason", columnDefinition = "TEXT")
     private String reason;
 
+    /**
+     * NR-155: SHA-256 chain, per tenant, closing ADR-06's row-chaining gap.
+     * seq is DB-assigned (BIGSERIAL) so "the previous row" is unambiguous
+     * even for events written in the same millisecond. Never set directly —
+     * always via AuditChainService.appendChained(), which holds a per-tenant
+     * advisory lock across the read-prev-hash + compute + insert sequence so
+     * concurrent writers can't fork the chain.
+     */
+    @Column(name = "seq", insertable = false, updatable = false)
+    private Long seq;
+
+    @Column(name = "prev_hash")
+    private String prevHash;
+
+    @Column(name = "row_hash")
+    private String rowHash;
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getTenantId() { return tenantId; }
@@ -103,4 +120,9 @@ public class AuditEvent {
     public void setFieldDiff(String fieldDiff) { this.fieldDiff = fieldDiff; }
     public String getReason() { return reason; }
     public void setReason(String reason) { this.reason = reason; }
+    public Long getSeq() { return seq; }
+    public String getPrevHash() { return prevHash; }
+    public void setPrevHash(String prevHash) { this.prevHash = prevHash; }
+    public String getRowHash() { return rowHash; }
+    public void setRowHash(String rowHash) { this.rowHash = rowHash; }
 }

@@ -23,10 +23,13 @@ public class AuditService {
     private static final Logger log = LoggerFactory.getLogger(AuditService.class);
     private final AuditEventRepository auditEventRepository;
     private final AuditDiffService diffService;
+    private final AuditChainService chainService;
 
-    public AuditService(AuditEventRepository auditEventRepository, AuditDiffService diffService) {
+    public AuditService(AuditEventRepository auditEventRepository, AuditDiffService diffService,
+                        AuditChainService chainService) {
         this.auditEventRepository = auditEventRepository;
         this.diffService = diffService;
+        this.chainService = chainService;
     }
 
     public void log(String action, String entity, String entityId, String details) {
@@ -83,7 +86,7 @@ public class AuditService {
             event.setDetails(diffService.toSummary(changes));
             event.setCreatedAt(Instant.now());
 
-            auditEventRepository.save(event);
+            chainService.appendChained(event);
 
             log.info("AUDIT action={} entity=MerchRule id={} name={} actor={} tenant={} project={} tier=1",
                     action, subject.getId(), event.getEntityName(), actor,
@@ -119,7 +122,7 @@ public class AuditService {
             event.setDetails(details);
             event.setCreatedAt(Instant.now());
 
-            auditEventRepository.save(event);
+            chainService.appendChained(event);
 
             // Structured, single-line audit marker for log-based observability
             // (Loki "NexaRank Audit Log" dashboard). Every audit action lands

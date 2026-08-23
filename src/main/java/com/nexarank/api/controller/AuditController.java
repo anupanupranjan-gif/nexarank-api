@@ -3,6 +3,8 @@ package com.nexarank.api.controller;
 
 import com.nexarank.api.model.ApiAccessEvent;
 import com.nexarank.api.model.AuditEvent;
+import com.nexarank.api.security.TenantContext;
+import com.nexarank.api.service.AuditChainService;
 import com.nexarank.api.service.AuditQueryService;
 import com.nexarank.api.service.AuditRetentionService;
 import com.nexarank.api.service.AuditService;
@@ -44,13 +46,16 @@ public class AuditController {
     private final AuditService auditService;
     private final AuditQueryService queryService;
     private final AuditRetentionService retentionService;
+    private final AuditChainService chainService;
 
     public AuditController(AuditService auditService,
                            AuditQueryService queryService,
-                           AuditRetentionService retentionService) {
+                           AuditRetentionService retentionService,
+                           AuditChainService chainService) {
         this.auditService = auditService;
         this.queryService = queryService;
         this.retentionService = retentionService;
+        this.chainService = chainService;
     }
 
     // ── Tier 1: rule-change history ─────────────────────────────────────────
@@ -207,6 +212,26 @@ public class AuditController {
     @PostMapping("/retention/purge")
     public ResponseEntity<?> runRetentionPurge() {
         return ResponseEntity.ok(retentionService.runPurge());
+    }
+
+    /**
+     * NR-155: recomputes the SHA-256 chain for the caller's tenant and
+     * reports whether every chained row's stored hash still matches its
+     * content. Tier 2, ADMIN only (same matcher as the rest of /audit/**).
+     */
+    @GetMapping("/verify")
+    public ResponseEntity<?> verifyChain() {
+        AuditChainService.ChainVerificationResult result =
+                chainService.verifyChain(TenantContext.getTenantId());
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("valid", result.valid());
+        body.put("rowsChecked", result.rowsChecked());
+        if (!result.valid()) {
+            body.put("brokenAtEventId", result.brokenAtEventId());
+            body.put("brokenAtSeq", result.brokenAtSeq());
+        }
+        return ResponseEntity.ok(body);
     }
 
     /** Legacy endpoint, kept so existing callers don't break. Tier 2, ADMIN only. */

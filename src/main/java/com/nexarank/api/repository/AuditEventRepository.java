@@ -85,4 +85,10 @@ public interface AuditEventRepository extends JpaRepository<AuditEvent, String> 
     @Modifying
     @Query("DELETE FROM AuditEvent e WHERE e.tenantId = :tenantId AND e.createdAt < :cutoff")
     int purgeOlderThan(@Param("tenantId") String tenantId, @Param("cutoff") Instant cutoff);
+
+    /** NR-155: the current end of a tenant's hash chain — where the next row links from. */
+    java.util.Optional<AuditEvent> findTopByTenantIdOrderBySeqDesc(String tenantId);
+
+    /** NR-155: full chain walk for verification, oldest first. */
+    List<AuditEvent> findByTenantIdOrderBySeqAsc(String tenantId);
 }
