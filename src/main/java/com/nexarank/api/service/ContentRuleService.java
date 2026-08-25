@@ -98,6 +98,15 @@ public class ContentRuleService {
         return new PageImpl<>(filtered.subList(from, to), PageRequest.of(page, size), filtered.size());
     }
 
+    /** NR-164: unpaged, undeleted list for config export — list() above is paginated for the UI. */
+    public List<ContentRule> getAllForExport() {
+        return repository.findByTenantIdAndProjectIdAndDeletedAtIsNull(
+                        TenantContext.getTenantId(), TenantContext.getProjectId())
+                .stream()
+                .map(this::withDeserializedFields)
+                .toList();
+    }
+
     public Optional<ContentRule> updateRule(String id, ContentRule updated) {
         return findScopedById(id).filter(r -> r.getDeletedAt() == null).map(existing -> {
             updated.setId(existing.getId());

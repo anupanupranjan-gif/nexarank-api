@@ -135,6 +135,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/search-quality/**").hasAnyRole("VIEWER", "MERCHANDISER", "APPROVER", "ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/v1/search-quality/run").hasRole("ADMIN")
                 .requestMatchers("/api/v1/engine-config/**").hasRole("ADMIN")
+                // NR-157/NR-165: config export/import — ADMIN-only, same gate as engine-config.
+                .requestMatchers("/api/v1/config-export/**").hasRole("ADMIN")
                 // NR-70: Tier 1 (rule-change history) is visible to MERCHANDISER and
                 // above and is project-scoped inside AuditQueryService via
                 // user_projects. Everything else under /audit stays Tier 2 /
