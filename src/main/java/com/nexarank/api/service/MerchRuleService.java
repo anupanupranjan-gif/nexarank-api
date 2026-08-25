@@ -116,11 +116,27 @@ public class MerchRuleService {
     }
 
     public Optional<MerchRule> getById(String id) {
-        return repository.findById(id).map(rule -> {
+        return findScopedById(id).map(rule -> {
             rule.setTriggerConditions(triggerService.getConditions(id));
             deserializeTransientFields(rule);
             return rule;
         });
+    }
+
+    /**
+     * NR-162 fix: every by-ID entry point below must go through this instead
+     * of repository.findById() directly. A plain findById(id) has no
+     * tenant/project filter at all — since rule ids are random UUIDs, any
+     * caller who knew or guessed an id could read or mutate a rule belonging
+     * to a different project (or a different tenant entirely), regardless of
+     * the caller's own project-scoped role. Rules outside the caller's
+     * current tenant+project context are treated as not found, same as a
+     * genuinely missing id, so this doesn't leak existence either.
+     */
+    private Optional<MerchRule> findScopedById(String id) {
+        return repository.findById(id)
+                .filter(r -> java.util.Objects.equals(r.getTenantId(), TenantContext.getTenantId())
+                        && java.util.Objects.equals(r.getProjectId(), TenantContext.getProjectId()));
     }
 
     /**
@@ -139,7 +155,7 @@ public class MerchRuleService {
 
     public Optional<MerchRule> updateRule(String id, MerchRule updated) {
         validateRedirectUrl(updated);
-        return repository.findById(id).map(existing -> {
+        return findScopedById(id).map(existing -> {
             // NR-70: detached snapshot taken before any mutation, so the audit
             // diff compares real before/after state rather than one object with
             // itself. Transient fields are deserialized first, otherwise
@@ -188,7 +204,7 @@ public class MerchRuleService {
      */
     public Optional<MerchRule> submitForReview(String id) {
         String currentUser = getCurrentUsername();
-        return repository.findById(id).map(rule -> {
+        return findScopedById(id).map(rule -> {
             if (rule.getStatus() != MerchRule.RuleStatus.DRAFT) {
                 throw new IllegalArgumentException(
                         "Only DRAFT rules can be submitted for review (current status: " + rule.getStatus() + ")");
@@ -215,7 +231,7 @@ public class MerchRuleService {
      */
     public Optional<MerchRule> approveRule(String id, String comment, boolean publishNow) {
         String currentUser = getCurrentUsername();
-        return repository.findById(id).map(rule -> {
+        return findScopedById(id).map(rule -> {
             MerchRule beforeState = auditDiffService.copyOf(rule);
             rule.setStatus(MerchRule.RuleStatus.APPROVED);
             rule.setApprovedBy(currentUser);
@@ -253,7 +269,7 @@ public class MerchRuleService {
      */
     public Optional<MerchRule> promoteToLive(String id) {
         String currentUser = getCurrentUsername();
-        return repository.findById(id).map(rule -> {
+        return findScopedById(id).map(rule -> {
             if (rule.getStatus() != MerchRule.RuleStatus.APPROVED) {
                 throw new IllegalArgumentException(
                         "Only APPROVED rules can be promoted to LIVE (current status: " + rule.getStatus() + ")");
@@ -282,7 +298,7 @@ public class MerchRuleService {
         if (target != MerchRule.RuleStatus.APPROVED && target != MerchRule.RuleStatus.DRAFT) {
             throw new IllegalArgumentException("Rules can only be demoted to APPROVED or DRAFT, not " + target);
         }
-        return repository.findById(id).map(rule -> {
+        return findScopedById(id).map(rule -> {
             if (rule.getStatus() != MerchRule.RuleStatus.LIVE) {
                 throw new IllegalArgumentException(
                         "Only LIVE rules can be demoted (current status: " + rule.getStatus() + ")");
@@ -321,7 +337,7 @@ public class MerchRuleService {
      */
     public Optional<MerchRule> rejectRule(String id, String comment) {
         String currentUser = getCurrentUsername();
-        return repository.findById(id).map(rule -> {
+        return findScopedById(id).map(rule -> {
             MerchRule beforeState = auditDiffService.copyOf(rule);
             rule.setStatus(MerchRule.RuleStatus.DRAFT);
             rule.setEnabled(false);
@@ -340,7 +356,7 @@ public class MerchRuleService {
     }
 
     public Optional<MerchRule> toggleRule(String id) {
-        return repository.findById(id).map(rule -> {
+        return findScopedById(id).map(rule -> {
             MerchRule beforeState = auditDiffService.copyOf(rule);
             rule.setEnabled(!rule.isEnabled());
             rule.setUpdatedAt(Instant.now());
@@ -352,19 +368,23 @@ public class MerchRuleService {
     }
 
     public void deleteRule(String id) {
-        repository.findById(id).ifPresent(rule -> {
+        // NR-162 fix: deletion used to run unconditionally regardless of
+        // whether the rule was even found in-scope, so a cross-project id
+        // still got deleted even though the "logged" branch silently
+        // no-opped for it. Now the delete itself is scoped too.
+        findScopedById(id).ifPresent(rule -> {
             // Logged before the row is gone. entity_name is denormalized at
             // write time, so this entry stays readable after the rule itself
             // no longer exists to join against.
             auditService.logRuleChange("RULE_DELETED", rule, null, null, getCurrentUsername());
             cacheVersionService.bump(rule.getTenantId(), rule.getProjectId());
+            repository.deleteById(id);
         });
-        repository.deleteById(id);
     }
 
     public Optional<MerchRule> rollbackRule(String id, int versionNumber) {
         String currentUser = getCurrentUsername();
-        return repository.findById(id)
+        return findScopedById(id)
                 .flatMap(current -> versionService.applyRollback(current, versionNumber))
                 .map(restored -> {
                     restored.setStatus(MerchRule.RuleStatus.PENDING_REVIEW);

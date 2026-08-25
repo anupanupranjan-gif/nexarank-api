@@ -70,8 +70,12 @@ public class FacetVisibilityService {
 
     @Transactional
     public Optional<FacetVisibilityRule> updateRule(String id, FacetVisibilityRule updated) {
+        // NR-162 companion fix: this only checked tenantId, not projectId —
+        // a project-scoped user could edit another project's facet
+        // visibility rule in the same tenant just by id.
         return repository.findById(id)
-                .filter(r -> r.getTenantId().equals(TenantContext.getTenantId()))
+                .filter(r -> r.getTenantId().equals(TenantContext.getTenantId())
+                        && r.getProjectId().equals(TenantContext.getProjectId()))
                 .map(existing -> {
                     updated.setId(existing.getId());
                     updated.setTenantId(existing.getTenantId());
@@ -88,7 +92,8 @@ public class FacetVisibilityService {
 
     public void deleteRule(String id) {
         repository.findById(id)
-                .filter(r -> r.getTenantId().equals(TenantContext.getTenantId()))
+                .filter(r -> r.getTenantId().equals(TenantContext.getTenantId())
+                        && r.getProjectId().equals(TenantContext.getProjectId()))
                 .ifPresent(repository::delete);
     }
 

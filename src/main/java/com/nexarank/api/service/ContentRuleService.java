@@ -64,9 +64,24 @@ public class ContentRuleService {
     }
 
     public Optional<ContentRule> getById(String id) {
-        return repository.findById(id)
+        return findScopedById(id)
                 .filter(r -> r.getDeletedAt() == null)
                 .map(this::withDeserializedFields);
+    }
+
+    /**
+     * NR-162 companion fix: every findById(id) below used to have no
+     * tenant filter at all — same bug class found in MerchRuleService, one
+     * tier worse since ContentRule has no projectId to begin with (it was
+     * never brought under NR-121's project-scoping model — that's a
+     * separate, larger gap worth its own ticket, not fixed here). This at
+     * least closes the cross-TENANT leak: any authenticated user who knew
+     * or guessed a content rule id could previously read/mutate a rule
+     * belonging to a different tenant entirely.
+     */
+    private Optional<ContentRule> findScopedById(String id) {
+        return repository.findById(id)
+                .filter(r -> r.getTenantId().equals(TenantContext.getTenantId()));
     }
 
     public Page<ContentRule> list(ContentZone zone, ContentRule.ContentRuleStatus status, int page, int size) {
@@ -84,7 +99,7 @@ public class ContentRuleService {
     }
 
     public Optional<ContentRule> updateRule(String id, ContentRule updated) {
-        return repository.findById(id).filter(r -> r.getDeletedAt() == null).map(existing -> {
+        return findScopedById(id).filter(r -> r.getDeletedAt() == null).map(existing -> {
             updated.setId(existing.getId());
             updated.setTenantId(existing.getTenantId());
             updated.setCreatedBy(existing.getCreatedBy());
@@ -106,7 +121,7 @@ public class ContentRuleService {
     }
 
     public void deleteRule(String id) {
-        repository.findById(id).ifPresent(rule -> {
+        findScopedById(id).ifPresent(rule -> {
             rule.setDeletedAt(Instant.now());
             rule.setUpdatedAt(Instant.now());
             repository.save(rule);
@@ -119,7 +134,7 @@ public class ContentRuleService {
 
     public Optional<ContentRule> submitForReview(String id) {
         String currentUser = getCurrentUsername();
-        return repository.findById(id).filter(r -> r.getDeletedAt() == null).map(rule -> {
+        return findScopedById(id).filter(r -> r.getDeletedAt() == null).map(rule -> {
             if (rule.getStatus() != ContentRule.ContentRuleStatus.DRAFT) {
                 throw new IllegalArgumentException(
                         "Only DRAFT content rules can be submitted for review (current status: " + rule.getStatus() + ")");
@@ -136,7 +151,7 @@ public class ContentRuleService {
 
     public Optional<ContentRule> approveRule(String id, String comment) {
         String currentUser = getCurrentUsername();
-        return repository.findById(id).filter(r -> r.getDeletedAt() == null).map(rule -> {
+        return findScopedById(id).filter(r -> r.getDeletedAt() == null).map(rule -> {
             if (rule.getStatus() != ContentRule.ContentRuleStatus.PENDING_REVIEW) {
                 throw new IllegalArgumentException(
                         "Only PENDING_REVIEW content rules can be approved (current status: " + rule.getStatus() + ")");
@@ -159,7 +174,7 @@ public class ContentRuleService {
      */
     public Optional<ContentRule> rejectRule(String id, String comment) {
         String currentUser = getCurrentUsername();
-        return repository.findById(id).filter(r -> r.getDeletedAt() == null).map(rule -> {
+        return findScopedById(id).filter(r -> r.getDeletedAt() == null).map(rule -> {
             rule.setStatus(ContentRule.ContentRuleStatus.DRAFT);
             rule.setApprovedBy(currentUser);
             rule.setRejectionComment(comment);

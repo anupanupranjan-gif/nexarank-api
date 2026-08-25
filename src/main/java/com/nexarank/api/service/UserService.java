@@ -84,16 +84,14 @@ public class UserService {
         user.setEmailVerified(!hasEmail);
         User saved = userRepository.save(user);
 
-        // NR-121 step 2: User.role remains authoritative for auth (unchanged,
-        // read by JwtAuthFilter/SecurityConfig) — this only additionally
-        // populates user_projects for the project-scoped roles, granted on
-        // every project in the tenant so a newly-created user behaves
-        // identically to the V37 migration's backfill for existing users,
-        // rather than needing separate logic. No authorization check reads
-        // this yet.
-        if (role == User.Role.MERCHANDISER || role == User.Role.APPROVER) {
-            userProjectService.grantRoleOnAllTenantProjects(saved.getId(), saved.getTenantId(), role);
-        }
+        // NR-163 fix: MERCHANDISER/APPROVER accounts get NO project access at
+        // creation time — a project-scoped role only means something once
+        // it's assigned to a specific project via the project-role endpoints
+        // (POST /users/{id}/projects/{projectId}, or MyTeam.js's self-service
+        // path). This block used to call grantRoleOnAllTenantProjects() here,
+        // which silently gave every new MERCHANDISER/APPROVER access to every
+        // project in the tenant — the exact global-access hole NR-121 was
+        // built to close. See NR-163.
 
         if (hasEmail) {
             UserActionTokenService.IssuedToken issued = actionTokenService.issue(saved.getId(), UserActionToken.Purpose.VERIFY_EMAIL, VERIFY_TTL_MS);
@@ -132,9 +130,7 @@ public class UserService {
         user.setEmailVerified(false);
         User saved = userRepository.save(user);
 
-        if (role == User.Role.MERCHANDISER || role == User.Role.APPROVER) {
-            userProjectService.grantRoleOnAllTenantProjects(saved.getId(), saved.getTenantId(), role);
-        }
+        // NR-163 fix: see createUser() above — no all-tenant-project grant here either.
 
         UserActionTokenService.IssuedToken issued = actionTokenService.issue(saved.getId(), UserActionToken.Purpose.INVITE, INVITE_TTL_MS);
         emailService.sendInvite(saved, issued.rawToken());

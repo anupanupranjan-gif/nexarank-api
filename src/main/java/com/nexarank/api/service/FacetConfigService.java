@@ -29,7 +29,20 @@ public class FacetConfigService {
     }
 
     public Optional<FacetConfig> getById(String id) {
-        return repository.findById(id);
+        return findScopedById(id);
+    }
+
+    /**
+     * NR-162 companion fix: same class of by-ID scoping gap found in
+     * MerchRuleService — findById(id) had no tenant/project filter, so any
+     * ADMIN could read/update/toggle/delete another project's (or another
+     * tenant's) facet config just by id. deleteFacet() was worse still: it
+     * called repository.deleteById(id) with no lookup at all.
+     */
+    private Optional<FacetConfig> findScopedById(String id) {
+        return repository.findById(id)
+                .filter(f -> java.util.Objects.equals(f.getTenantId(), TenantContext.getTenantId())
+                        && java.util.Objects.equals(f.getProjectId(), TenantContext.getProjectId()));
     }
 
     public FacetConfig createFacet(FacetConfig facet) {
@@ -45,7 +58,7 @@ public class FacetConfigService {
     }
 
     public Optional<FacetConfig> updateFacet(String id, FacetConfig updated) {
-        return repository.findById(id).map(existing -> {
+        return findScopedById(id).map(existing -> {
             updated.setId(existing.getId());
             updated.setTenantId(existing.getTenantId());
             updated.setProjectId(existing.getProjectId());
@@ -56,7 +69,7 @@ public class FacetConfigService {
     }
 
     public Optional<FacetConfig> toggleFacet(String id) {
-        return repository.findById(id).map(facet -> {
+        return findScopedById(id).map(facet -> {
             facet.setEnabled(!facet.isEnabled());
             facet.setUpdatedAt(Instant.now());
             return repository.save(facet);
@@ -64,7 +77,7 @@ public class FacetConfigService {
     }
 
     public void deleteFacet(String id) {
-        repository.deleteById(id);
+        findScopedById(id).ifPresent(f -> repository.deleteById(id));
     }
 
     public void seedDefaultFacets() {

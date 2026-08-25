@@ -170,6 +170,16 @@ public class RuleAbTestService {
     }
 
     public Optional<RuleAbTest> getById(String id) {
+        return findScopedById(id);
+    }
+
+    /**
+     * NR-162 companion fix: promoteWinner/archiveTest previously only
+     * filtered by tenantId (not projectId), the same class of gap found in
+     * MerchRuleService — a project-scoped user could promote/archive
+     * another project's A/B test in the same tenant just by id.
+     */
+    private Optional<RuleAbTest> findScopedById(String id) {
         return repository.findById(id)
                 .filter(t -> t.getTenantId().equals(TenantContext.getTenantId())
                           && t.getProjectId().equals(TenantContext.getProjectId()));
@@ -237,8 +247,7 @@ public class RuleAbTestService {
     public RuleAbTest promoteWinner(String testId, String winnerVariant) {
         String currentUser = getCurrentUsername();
 
-        RuleAbTest test = repository.findById(testId)
-                .filter(t -> t.getTenantId().equals(TenantContext.getTenantId()))
+        RuleAbTest test = findScopedById(testId)
                 .orElseThrow(() -> new IllegalArgumentException("Test not found: " + testId));
 
         if (test.getStatus() != RuleAbTest.TestStatus.RUNNING) {
@@ -274,8 +283,7 @@ public class RuleAbTestService {
 
     @Transactional
     public RuleAbTest archiveTest(String testId) {
-        RuleAbTest test = repository.findById(testId)
-                .filter(t -> t.getTenantId().equals(TenantContext.getTenantId()))
+        RuleAbTest test = findScopedById(testId)
                 .orElseThrow(() -> new IllegalArgumentException("Test not found: " + testId));
         test.setStatus(RuleAbTest.TestStatus.ARCHIVED);
         test.setCompletedAt(Instant.now());
