@@ -55,6 +55,13 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of("METHOD_NOT_ALLOWED", ex.getMessage()));
     }
 
+    /** NR-166: the config import precondition gate (engine config + LLM config must already be valid) wasn't met. */
+    @ExceptionHandler(com.nexarank.api.configexport.ConfigImportService.GateNotPassedException.class)
+    public ResponseEntity<ErrorResponse> handleGateNotPassed(com.nexarank.api.configexport.ConfigImportService.GateNotPassedException ex) {
+        return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED)
+                .body(ErrorResponse.of("IMPORT_PRECONDITION_FAILED", ex.getMessage()));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleBadRequest(IllegalArgumentException ex) {
         log.warn("Bad request: {}", ex.getMessage());

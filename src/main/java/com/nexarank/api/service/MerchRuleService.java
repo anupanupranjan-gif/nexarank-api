@@ -115,6 +115,97 @@ public class MerchRuleService {
         return saved;
     }
 
+    public record ImportResult(MerchRule rule, boolean idCollisionResolved) {}
+
+    /**
+     * NR-167 (config import): upsert-by-id. Matches the exported item's `id`
+     * ONLY within the CURRENT tenant+project — an id that exists but belongs
+     * to a DIFFERENT tenant/project (e.g. the same export bundle already
+     * imported into another environment sharing this database) is NOT
+     * treated as a match. Reusing/mutating another tenant's row by id would
+     * reopen exactly the cross-tenant IDOR class of bug fixed in NR-162, so
+     * in that case a fresh id is generated instead and the caller is told
+     * via idCollisionResolved so it can be surfaced in the import summary.
+     *
+     * Imported rules land APPROVED — never DRAFT — per explicit decision
+     * (2026-08-25): re-approving every rule on every import wastes review
+     * time for what's meant to be a fast disaster-recovery/migration path.
+     * If the target tenant has auto-publish on, this cascades straight to
+     * LIVE the same way a normal approval would (doPromoteToLive below).
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public ImportResult importRule(com.nexarank.api.configexport.dto.RuleExport dto) {
+        String tenantId = TenantContext.getTenantId();
+        String projectId = TenantContext.getProjectId();
+        String actor = getCurrentUsername();
+
+        Optional<MerchRule> existingAnywhere = repository.findById(dto.id());
+        boolean idCollision = existingAnywhere.isPresent() &&
+                !(tenantId.equals(existingAnywhere.get().getTenantId())
+                        && projectId.equals(existingAnywhere.get().getProjectId()));
+
+        MerchRule rule;
+        boolean isNew;
+        MerchRule beforeState = null;
+        if (existingAnywhere.isPresent() && !idCollision) {
+            rule = existingAnywhere.get();
+            deserializeTransientFields(rule);
+            beforeState = auditDiffService.copyOf(rule);
+            isNew = false;
+        } else {
+            rule = new MerchRule();
+            rule.setId(idCollision ? UUID.randomUUID().toString() : dto.id());
+            rule.setTenantId(tenantId);
+            rule.setProjectId(projectId);
+            rule.setCreatedAt(Instant.now());
+            isNew = true;
+        }
+
+        rule.setType(MerchRule.RuleType.valueOf(dto.type()));
+        rule.setQuery(dto.query());
+        rule.setBoostField(dto.boostField());
+        rule.setBoostValue(dto.boostValue());
+        rule.setBoostFactor(dto.boostFactor());
+        rule.setPinnedIds(dto.pinnedIds());
+        rule.setSynonyms(dto.synonyms());
+        rule.setSynonymDirection(dto.synonymDirection() == null
+                ? MerchRule.SynonymDirection.TWO_WAY : MerchRule.SynonymDirection.valueOf(dto.synonymDirection()));
+        rule.setPriority(dto.priority());
+        rule.setRequireQuery(dto.requireQuery());
+        rule.setRedirectUrl(dto.redirectUrl());
+        rule.setActivateAt(dto.activateAt());
+        rule.setExpireAt(dto.expireAt());
+        rule.setSubmittedBy(actor);
+        rule.setStatus(MerchRule.RuleStatus.APPROVED);
+        rule.setApprovedBy("import");
+        rule.setEnabled(false);
+        rule.setUpdatedAt(Instant.now());
+        serializeTransientFields(rule);
+
+        MerchRule saved = repository.save(rule);
+        versionService.snapshot(saved, actor, isNew ? "Imported" : "Re-imported (updated from source)");
+        auditService.logRuleChange(isNew ? "RULE_IMPORTED" : "RULE_REIMPORTED", beforeState, saved, null, actor);
+
+        List<Map<String, Object>> conditionDtos = dto.triggerConditions() == null ? List.of()
+                : dto.triggerConditions().stream()
+                        .map(c -> { Map<String, Object> d = new LinkedHashMap<>();
+                            d.put("facetField", c.facetField());
+                            d.put("facetValues", c.facetValues());
+                            return d; })
+                        .toList();
+        triggerService.saveConditions(saved.getId(), conditionDtos);
+
+        boolean autoPublish = tenantRepository.findById(saved.getTenantId())
+                .map(Tenant::isAutoPublishRules).orElse(true);
+        if (autoPublish) {
+            saved = doPromoteToLive(saved, "import", "Auto-published on import (tenant auto-publish enabled)");
+        }
+        cacheVersionService.bump(saved.getTenantId(), saved.getProjectId());
+        log.info("RULE_IMPORTED id={} query={} isNew={} idCollisionResolved={} autoPublish={}",
+                saved.getId(), saved.getQuery(), isNew, idCollision, autoPublish);
+        return new ImportResult(saved, idCollision);
+    }
+
     public Optional<MerchRule> getById(String id) {
         return findScopedById(id).map(rule -> {
             rule.setTriggerConditions(triggerService.getConditions(id));

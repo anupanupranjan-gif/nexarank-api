@@ -173,6 +173,50 @@ public class RuleAbTestService {
         return findScopedById(id);
     }
 
+    public record ImportResult(RuleAbTest test, boolean idCollisionResolved) {}
+
+    /**
+     * NR-167 (config import): same upsert-by-id-within-current-tenant/project
+     * pattern as MerchRuleService.importRule. ruleAId/ruleBId must be
+     * resolved by the caller first (ConfigImportService) against the id
+     * remap produced while importing rules.json, since a rule's id can
+     * change on import if it collided with another tenant's data — this
+     * method takes the already-resolved ids, not the raw export ids.
+     */
+    public ImportResult importAbTest(com.nexarank.api.configexport.dto.AbTestExport dto,
+                                      String resolvedRuleAId, String resolvedRuleBId) {
+        String tenantId = TenantContext.getTenantId();
+        String projectId = TenantContext.getProjectId();
+
+        Optional<RuleAbTest> existingAnywhere = repository.findById(dto.id());
+        boolean idCollision = existingAnywhere.isPresent() &&
+                !(tenantId.equals(existingAnywhere.get().getTenantId())
+                        && projectId.equals(existingAnywhere.get().getProjectId()));
+
+        RuleAbTest test;
+        if (existingAnywhere.isPresent() && !idCollision) {
+            test = existingAnywhere.get();
+        } else {
+            test = new RuleAbTest();
+            test.setId(idCollision ? UUID.randomUUID().toString() : dto.id());
+            test.setTenantId(tenantId);
+            test.setProjectId(projectId);
+            test.setCreatedAt(Instant.now());
+            test.setCreatedBy("import");
+            // Impressions/clicks/winnerId are deliberately not in AbTestExport
+            // (live traffic stats tied to the source environment) — a
+            // re-imported/updated test keeps whatever it already accumulated
+            // in this environment rather than resetting counters.
+        }
+
+        test.setQuery(dto.query());
+        test.setRuleAId(resolvedRuleAId);
+        test.setRuleBId(resolvedRuleBId);
+        test.setStatus(RuleAbTest.TestStatus.RUNNING);
+
+        return new ImportResult(repository.save(test), idCollision);
+    }
+
     /**
      * NR-162 companion fix: promoteWinner/archiveTest previously only
      * filtered by tenantId (not projectId), the same class of gap found in

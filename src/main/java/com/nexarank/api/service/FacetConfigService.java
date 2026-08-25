@@ -45,6 +45,44 @@ public class FacetConfigService {
                         && java.util.Objects.equals(f.getProjectId(), TenantContext.getProjectId()));
     }
 
+    public record ImportResult(FacetConfig facet, boolean idCollisionResolved) {}
+
+    /** NR-167 (config import): same upsert-by-id-within-current-tenant/project pattern as MerchRuleService.importRule. */
+    public ImportResult importFacet(com.nexarank.api.configexport.dto.FacetExport dto) {
+        String tenantId = TenantContext.getTenantId();
+        String projectId = TenantContext.getProjectId();
+
+        Optional<FacetConfig> existingAnywhere = repository.findById(dto.id());
+        boolean idCollision = existingAnywhere.isPresent() &&
+                !(tenantId.equals(existingAnywhere.get().getTenantId())
+                        && projectId.equals(existingAnywhere.get().getProjectId()));
+
+        FacetConfig facet;
+        if (existingAnywhere.isPresent() && !idCollision) {
+            facet = existingAnywhere.get();
+        } else {
+            facet = new FacetConfig();
+            facet.setId(idCollision ? UUID.randomUUID().toString() : dto.id());
+            facet.setTenantId(tenantId);
+            facet.setProjectId(projectId);
+            facet.setCreatedAt(Instant.now());
+        }
+
+        facet.setFieldName(dto.fieldName());
+        facet.setDisplayLabel(dto.displayLabel());
+        facet.setFacetType(FacetConfig.FacetType.valueOf(dto.facetType()));
+        facet.setEnabled(dto.enabled());
+        facet.setShowCount(dto.showCount());
+        facet.setSortOrder(dto.sortOrder());
+        facet.setMaxValues(dto.maxValues());
+        facet.setRangeMin(dto.rangeMin());
+        facet.setRangeMax(dto.rangeMax());
+        facet.setRangeInterval(dto.rangeInterval());
+        facet.setUpdatedAt(Instant.now());
+
+        return new ImportResult(repository.save(facet), idCollision);
+    }
+
     public FacetConfig createFacet(FacetConfig facet) {
         if (facet.getId() == null) facet.setId(UUID.randomUUID().toString());
         if (facet.getTenantId() == null) facet.setTenantId(TenantContext.getTenantId());

@@ -64,6 +64,68 @@ public class ContentRuleService {
         return saved;
     }
 
+    public record ImportResult(ContentRule rule, boolean idCollisionResolved) {}
+
+    /**
+     * NR-167 (config import): same upsert-by-id-within-current-tenant/project
+     * pattern as MerchRuleService.importRule — see its javadoc for the
+     * cross-tenant id collision reasoning. Content rules have no separate
+     * "approved then promoted" split (approveRule sets ACTIVE directly), so
+     * imported rules land ACTIVE — the direct equivalent of "no manual
+     * review required" here.
+     */
+    public ImportResult importContentRule(com.nexarank.api.configexport.dto.ContentRuleExport dto) {
+        String tenantId = TenantContext.getTenantId();
+        String projectId = TenantContext.getProjectId();
+        String actor = getCurrentUsername();
+
+        Optional<ContentRule> existingAnywhere = repository.findById(dto.id());
+        boolean idCollision = existingAnywhere.isPresent() &&
+                !(tenantId.equals(existingAnywhere.get().getTenantId())
+                        && projectId.equals(existingAnywhere.get().getProjectId()));
+
+        ContentRule rule;
+        boolean isNew;
+        if (existingAnywhere.isPresent() && !idCollision) {
+            rule = existingAnywhere.get();
+            isNew = false;
+        } else {
+            rule = new ContentRule();
+            rule.setId(idCollision ? UUID.randomUUID().toString() : dto.id());
+            rule.setTenantId(tenantId);
+            rule.setProjectId(projectId);
+            rule.setCreatedAt(Instant.now());
+            rule.setCreatedBy(actor);
+            isNew = true;
+        }
+
+        rule.setZone(ContentZone.valueOf(dto.zone()));
+        rule.setName(dto.name());
+        rule.setDescription(dto.description());
+        rule.setPriority(dto.priority());
+        rule.setScheduleStart(dto.scheduleStart());
+        rule.setScheduleEnd(dto.scheduleEnd());
+        rule.setTriggerConditions(dto.triggerConditions() == null ? null
+                : dto.triggerConditions().stream()
+                        .map(c -> { RuleTriggerCondition rtc = new RuleTriggerCondition();
+                            rtc.setFacetField(c.facetField());
+                            rtc.setFacetValues(c.facetValues());
+                            return rtc; })
+                        .toList());
+        rule.setContentPayload(dto.contentPayload());
+        rule.setStatus(ContentRule.ContentRuleStatus.ACTIVE);
+        rule.setApprovedBy("import");
+        rule.setDeletedAt(null);
+        rule.setUpdatedAt(Instant.now());
+        serializeTransientFields(rule);
+
+        ContentRule saved = repository.save(rule);
+        versionService.snapshot(saved, actor, isNew ? "Imported" : "Re-imported (updated from source)");
+        log.info("CONTENT_RULE_IMPORTED id={} name={} isNew={} idCollisionResolved={}",
+                saved.getId(), saved.getName(), isNew, idCollision);
+        return new ImportResult(saved, idCollision);
+    }
+
     public Optional<ContentRule> getById(String id) {
         return findScopedById(id)
                 .filter(r -> r.getDeletedAt() == null)
