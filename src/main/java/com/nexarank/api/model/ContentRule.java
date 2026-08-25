@@ -16,6 +16,9 @@ public class ContentRule {
     @Column(name = "tenant_id", nullable = false)
     private String tenantId;
 
+    @Column(name = "project_id", nullable = false)
+    private String projectId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ContentZone zone;
@@ -84,6 +87,8 @@ public class ContentRule {
     public void setId(String id) { this.id = id; }
     public String getTenantId() { return tenantId; }
     public void setTenantId(String tenantId) { this.tenantId = tenantId; }
+    public String getProjectId() { return projectId; }
+    public void setProjectId(String projectId) { this.projectId = projectId; }
     public ContentZone getZone() { return zone; }
     public void setZone(ContentZone zone) { this.zone = zone; }
     public String getName() { return name; }

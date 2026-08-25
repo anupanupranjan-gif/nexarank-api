@@ -44,6 +44,7 @@ public class ContentRuleVersionService {
         version.setId(UUID.randomUUID().toString());
         version.setRuleId(rule.getId());
         version.setTenantId(rule.getTenantId());
+        version.setProjectId(rule.getProjectId());
         version.setVersionNumber(nextVersion);
         version.setSnapshot(serialize(rule));
         version.setChangedBy(changedBy);
@@ -57,7 +58,13 @@ public class ContentRuleVersionService {
     }
 
     public List<Map<String, Object>> getHistory(String ruleId) {
+        // Defense in depth — ContentRuleService.getHistory() already scope-checks
+        // the rule itself before calling this, but filter here too, same as
+        // RuleVersionService.belongsToCurrentTenant, in case a future caller
+        // calls this directly without that check.
         return repository.findByRuleIdOrderByVersionNumberDesc(ruleId).stream()
+                .filter(v -> v.getTenantId().equals(com.nexarank.api.security.TenantContext.getTenantId())
+                        && v.getProjectId().equals(com.nexarank.api.security.TenantContext.getProjectId()))
                 .map(v -> Map.<String, Object>of(
                         "versionNumber", v.getVersionNumber(),
                         "changedBy", v.getChangedBy() == null ? "system" : v.getChangedBy(),

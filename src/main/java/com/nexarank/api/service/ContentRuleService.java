@@ -51,6 +51,7 @@ public class ContentRuleService {
     public ContentRule createRule(ContentRule rule) {
         if (rule.getId() == null) rule.setId(UUID.randomUUID().toString());
         if (rule.getTenantId() == null) rule.setTenantId(TenantContext.getTenantId());
+        if (rule.getProjectId() == null) rule.setProjectId(TenantContext.getProjectId());
         String currentUser = getCurrentUsername();
         rule.setCreatedBy(currentUser);
         rule.setStatus(ContentRule.ContentRuleStatus.DRAFT);
@@ -70,22 +71,21 @@ public class ContentRuleService {
     }
 
     /**
-     * NR-162 companion fix: every findById(id) below used to have no
-     * tenant filter at all — same bug class found in MerchRuleService, one
-     * tier worse since ContentRule has no projectId to begin with (it was
-     * never brought under NR-121's project-scoping model — that's a
-     * separate, larger gap worth its own ticket, not fixed here). This at
-     * least closes the cross-TENANT leak: any authenticated user who knew
-     * or guessed a content rule id could previously read/mutate a rule
-     * belonging to a different tenant entirely.
+     * NR-162/NR-152 fix: every findById(id) below used to have no tenant
+     * filter at all, and ContentRule had no projectId to filter on in the
+     * first place — it was never brought under NR-121's project-scoping
+     * model. Both gaps are closed together: ContentRule now carries
+     * project_id (V52 migration) and every by-ID lookup checks both.
      */
     private Optional<ContentRule> findScopedById(String id) {
         return repository.findById(id)
-                .filter(r -> r.getTenantId().equals(TenantContext.getTenantId()));
+                .filter(r -> r.getTenantId().equals(TenantContext.getTenantId())
+                        && r.getProjectId().equals(TenantContext.getProjectId()));
     }
 
     public Page<ContentRule> list(ContentZone zone, ContentRule.ContentRuleStatus status, int page, int size) {
-        List<ContentRule> all = repository.findByTenantIdAndDeletedAtIsNull(TenantContext.getTenantId());
+        List<ContentRule> all = repository.findByTenantIdAndProjectIdAndDeletedAtIsNull(
+                TenantContext.getTenantId(), TenantContext.getProjectId());
         List<ContentRule> filtered = all.stream()
                 .filter(r -> zone == null || r.getZone() == zone)
                 .filter(r -> status == null || r.getStatus() == status)
@@ -102,6 +102,7 @@ public class ContentRuleService {
         return findScopedById(id).filter(r -> r.getDeletedAt() == null).map(existing -> {
             updated.setId(existing.getId());
             updated.setTenantId(existing.getTenantId());
+            updated.setProjectId(existing.getProjectId());
             updated.setCreatedBy(existing.getCreatedBy());
             updated.setCreatedAt(existing.getCreatedAt());
             updated.setSubmittedBy(existing.getSubmittedBy());
@@ -188,7 +189,12 @@ public class ContentRuleService {
     }
 
     public List<Map<String, Object>> getHistory(String id) {
-        return versionService.getHistory(id);
+        // NR-162/NR-152: scope-check the rule itself before returning any of
+        // its version history — findScopedById 404s for a rule outside the
+        // caller's tenant+project the same way getById does.
+        return findScopedById(id)
+                .map(r -> versionService.getHistory(id))
+                .orElse(List.of());
     }
 
     // ── Enrich evaluation (NR-83) ───────────────────────────────────────────
@@ -201,8 +207,9 @@ public class ContentRuleService {
     public Map<ContentZone, ContentRule> resolveZones(List<ContentZone> zones, Map<String, String> context) {
         Instant now = Instant.now();
         String tenantId = TenantContext.getTenantId();
-        List<ContentRule> candidates = repository.findByTenantIdAndZoneInAndStatusAndDeletedAtIsNull(
-                        tenantId, zones, ContentRule.ContentRuleStatus.ACTIVE)
+        String projectId = TenantContext.getProjectId();
+        List<ContentRule> candidates = repository.findByTenantIdAndProjectIdAndZoneInAndStatusAndDeletedAtIsNull(
+                        tenantId, projectId, zones, ContentRule.ContentRuleStatus.ACTIVE)
                 .stream()
                 .map(this::withDeserializedFields)
                 .filter(r -> r.getScheduleStart() == null || !r.getScheduleStart().isAfter(now))

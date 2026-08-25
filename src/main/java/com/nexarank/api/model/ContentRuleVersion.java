@@ -7,7 +7,7 @@ import java.time.Instant;
 /**
  * Immutable snapshot of a ContentRule at a point in time.
  * One row is appended on every create/update/submit/approve/reject.
- * Same pattern as RuleVersion, scoped by tenant_id only (ContentRule has no project_id).
+ * Same pattern as RuleVersion (NR-152: project_id added alongside ContentRule's own).
  */
 @Entity
 @Table(name = "content_rule_versions",
@@ -22,6 +22,9 @@ public class ContentRuleVersion {
 
     @Column(name = "tenant_id", nullable = false)
     private String tenantId;
+
+    @Column(name = "project_id", nullable = false)
+    private String projectId;
 
     @Column(name = "version_number", nullable = false)
     private int versionNumber;
@@ -44,6 +47,8 @@ public class ContentRuleVersion {
     public void setRuleId(String ruleId) { this.ruleId = ruleId; }
     public String getTenantId() { return tenantId; }
     public void setTenantId(String tenantId) { this.tenantId = tenantId; }
+    public String getProjectId() { return projectId; }
+    public void setProjectId(String projectId) { this.projectId = projectId; }
     public int getVersionNumber() { return versionNumber; }
     public void setVersionNumber(int versionNumber) { this.versionNumber = versionNumber; }
     public String getSnapshot() { return snapshot; }

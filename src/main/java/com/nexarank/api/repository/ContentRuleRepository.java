@@ -8,7 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 
 public interface ContentRuleRepository extends JpaRepository<ContentRule, String> {
-    List<ContentRule> findByTenantIdAndDeletedAtIsNull(String tenantId);
-    List<ContentRule> findByTenantIdAndZoneInAndStatusAndDeletedAtIsNull(
-            String tenantId, List<ContentZone> zones, ContentRule.ContentRuleStatus status);
+    List<ContentRule> findByTenantIdAndProjectIdAndDeletedAtIsNull(String tenantId, String projectId);
+    List<ContentRule> findByTenantIdAndProjectIdAndZoneInAndStatusAndDeletedAtIsNull(
+            String tenantId, String projectId, List<ContentZone> zones, ContentRule.ContentRuleStatus status);
 }
