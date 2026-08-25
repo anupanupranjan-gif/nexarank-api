@@ -18,6 +18,7 @@ public interface UserRepository extends JpaRepository<User, String> {
     List<User> findByTenantIdAndRoleAndEmailIsNotNull(String tenantId, User.Role role);
     boolean existsByUsername(String username);
     boolean existsByTenantIdAndUsername(String tenantId, String username);
+    List<User> findByLastActiveProjectId(String projectId);
 
     /**
      * NR-121: project-scoped equivalent of findByTenantIdAndRoleAndEmailIsNotNull,

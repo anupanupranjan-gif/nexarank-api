@@ -3,13 +3,22 @@ package com.nexarank.api.controller;
 
 import com.nexarank.api.model.Project;
 import com.nexarank.api.model.Tenant;
+import com.nexarank.api.repository.ContentRuleRepository;
+import com.nexarank.api.repository.FacetConfigRepository;
+import com.nexarank.api.repository.FacetVisibilityRuleRepository;
+import com.nexarank.api.repository.LlmConfigRepository;
+import com.nexarank.api.repository.MerchRuleRepository;
 import com.nexarank.api.repository.ProjectRepository;
+import com.nexarank.api.repository.RuleAbTestRepository;
+import com.nexarank.api.repository.SearchEngineConfigRepository;
 import com.nexarank.api.repository.TenantRepository;
+import com.nexarank.api.repository.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -20,10 +29,33 @@ public class TenantController {
 
     private final TenantRepository tenantRepository;
     private final ProjectRepository projectRepository;
+    private final MerchRuleRepository merchRuleRepository;
+    private final ContentRuleRepository contentRuleRepository;
+    private final FacetConfigRepository facetConfigRepository;
+    private final FacetVisibilityRuleRepository facetVisibilityRuleRepository;
+    private final RuleAbTestRepository ruleAbTestRepository;
+    private final SearchEngineConfigRepository searchEngineConfigRepository;
+    private final LlmConfigRepository llmConfigRepository;
+    private final UserRepository userRepository;
 
-    public TenantController(TenantRepository tenantRepository, ProjectRepository projectRepository) {
+    public TenantController(TenantRepository tenantRepository, ProjectRepository projectRepository,
+                             MerchRuleRepository merchRuleRepository, ContentRuleRepository contentRuleRepository,
+                             FacetConfigRepository facetConfigRepository,
+                             FacetVisibilityRuleRepository facetVisibilityRuleRepository,
+                             RuleAbTestRepository ruleAbTestRepository,
+                             SearchEngineConfigRepository searchEngineConfigRepository,
+                             LlmConfigRepository llmConfigRepository,
+                             UserRepository userRepository) {
         this.tenantRepository = tenantRepository;
         this.projectRepository = projectRepository;
+        this.merchRuleRepository = merchRuleRepository;
+        this.contentRuleRepository = contentRuleRepository;
+        this.facetConfigRepository = facetConfigRepository;
+        this.facetVisibilityRuleRepository = facetVisibilityRuleRepository;
+        this.ruleAbTestRepository = ruleAbTestRepository;
+        this.searchEngineConfigRepository = searchEngineConfigRepository;
+        this.llmConfigRepository = llmConfigRepository;
+        this.userRepository = userRepository;
     }
 
     // --- Tenant endpoints ---
@@ -189,6 +221,57 @@ public class TenantController {
             if (body.containsKey("name")) project.setName(body.get("name"));
             if (body.containsKey("enabled")) project.setEnabled(Boolean.parseBoolean(body.get("enabled")));
             return ResponseEntity.ok(projectRepository.save(project));
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Hard delete — only allowed when the project has no data left in it.
+     * There was no DELETE mapping for this path at all before, so every
+     * DELETE call here got the generic HttpRequestMethodNotSupportedException
+     * -> GlobalExceptionHandler's catch-all Exception handler, which
+     * reported it as an opaque 500 instead of a real 404/405.
+     *
+     * A real hard delete has to check every table with a project_id before
+     * touching the row: user_projects cascade-deletes on its own (V38), but
+     * merch_rules/content_rules/facet_config/facet_visibility_rules/
+     * rule_ab_tests/engine_config/llm_config do not — several of those are
+     * FK-constrained to projects(id) with no ON DELETE clause, so an
+     * unconditional delete would either fail with a raw constraint violation
+     * (another opaque 500) or, for the tables that aren't FK-constrained
+     * (rule_ab_tests), silently leave orphaned rows behind. Rejecting with a
+     * clear 409 when anything still references the project is safer than
+     * cascading real data away implicitly — the existing PUT .../projects/
+     * {projectId} with {"enabled": false} is the soft-delete path for a
+     * project that still has data in it.
+     */
+    @DeleteMapping("/tenants/{tenantId}/projects/{projectId}")
+    public ResponseEntity<?> deleteProject(@PathVariable String tenantId, @PathVariable String projectId) {
+        return projectRepository.findByTenantIdAndId(tenantId, projectId).map(project -> {
+            List<String> blockers = new ArrayList<>();
+            if (!merchRuleRepository.findByTenantIdAndProjectId(tenantId, projectId).isEmpty()) blockers.add("rules");
+            if (!contentRuleRepository.findByTenantIdAndProjectIdAndDeletedAtIsNull(tenantId, projectId).isEmpty()) blockers.add("content rules");
+            if (!facetConfigRepository.findByTenantIdAndProjectIdOrderBySortOrderAsc(tenantId, projectId).isEmpty()) blockers.add("facets");
+            if (!facetVisibilityRuleRepository.findByTenantIdAndProjectIdOrderByPriorityDesc(tenantId, projectId).isEmpty()) blockers.add("facet visibility rules");
+            if (!ruleAbTestRepository.findByTenantIdAndProjectId(tenantId, projectId).isEmpty()) blockers.add("A/B tests");
+            if (searchEngineConfigRepository.findFirstByTenantIdAndProjectId(tenantId, projectId).isPresent()) blockers.add("engine config");
+            if (llmConfigRepository.findFirstByTenantIdAndProjectId(tenantId, projectId).isPresent()) blockers.add("LLM config");
+
+            if (!blockers.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of(
+                        "error", "Project still has data and cannot be deleted: " + String.join(", ", blockers)
+                                + ". Remove it first, or use PUT with {\"enabled\": false} to disable the project instead.",
+                        "blockers", blockers));
+            }
+
+            // Nobody's left with this as their active project — resolveActiveProjectId
+            // picks a different one on their next login/refresh, same as if their
+            // access to it had simply been revoked.
+            List<com.nexarank.api.model.User> strandedUsers = userRepository.findByLastActiveProjectId(projectId);
+            strandedUsers.forEach(u -> u.setLastActiveProjectId(null));
+            userRepository.saveAll(strandedUsers);
+
+            projectRepository.delete(project); // user_projects rows cascade-delete (V38)
+            return ResponseEntity.noContent().build();
         }).orElse(ResponseEntity.notFound().build());
     }
 }

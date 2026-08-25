@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -37,6 +38,21 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ErrorResponse.of("FORBIDDEN", "Access denied"));
+    }
+
+    /**
+     * Found live 2026-08-25 debugging a project-delete 500: an unmapped
+     * HTTP method on a real path (e.g. DELETE where only GET/PUT/POST are
+     * mapped) was falling through to the catch-all Exception handler below
+     * and getting reported as an opaque 500 instead of the real 405 - the
+     * generic handler logs "Unexpected error" for something that isn't
+     * actually unexpected, and callers have no way to tell "this endpoint
+     * doesn't support that verb" from "the server broke."
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(ErrorResponse.of("METHOD_NOT_ALLOWED", ex.getMessage()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
