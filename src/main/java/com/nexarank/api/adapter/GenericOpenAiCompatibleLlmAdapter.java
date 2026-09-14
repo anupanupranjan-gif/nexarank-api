@@ -68,7 +68,13 @@ public class GenericOpenAiCompatibleLlmAdapter implements LlmPort {
 
     @Override
     public String rewrite(String query, String promptTemplate, LlmConfig config) {
-        String prompt = String.format(promptTemplate, query);
+        String prompt;
+        try {
+            prompt = String.format(promptTemplate, query);
+        } catch (Exception e) {
+            log.warn("OpenAI-compatible rewrite: malformed prompt template, using original query: {}", e.getMessage());
+            return query;
+        }
         String content = chatComplete(prompt, config, 0.3, 60);
         if (content == null) {
             log.warn("OpenAI-compatible rewrite empty/failed for query='{}', using original", query);
