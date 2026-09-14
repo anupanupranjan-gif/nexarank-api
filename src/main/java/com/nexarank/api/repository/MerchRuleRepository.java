@@ -13,6 +13,7 @@ public interface MerchRuleRepository extends JpaRepository<MerchRule, String> {
     List<MerchRule> findByTenantIdAndProjectId(String tenantId, String projectId);
     List<MerchRule> findByTenantIdAndProjectIdAndEnabled(String tenantId, String projectId, boolean enabled);
     List<MerchRule> findByTenantIdAndProjectIdAndStatus(String tenantId, String projectId, MerchRule.RuleStatus status);
+    List<MerchRule> findByTenantIdAndProjectIdAndStatusAndEnabled(String tenantId, String projectId, MerchRule.RuleStatus status, boolean enabled);
     List<MerchRule> findByQueryAndEnabled(String query, boolean enabled);
     List<MerchRule> findByTenantIdAndProjectIdAndQueryAndEnabled(String tenantId, String projectId, String query, boolean enabled);
 

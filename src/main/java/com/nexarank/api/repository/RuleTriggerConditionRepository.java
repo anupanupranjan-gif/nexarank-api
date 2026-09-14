@@ -10,5 +10,7 @@ public interface RuleTriggerConditionRepository extends JpaRepository<RuleTrigge
 
     List<RuleTriggerCondition> findByRuleIdOrderByPosition(String ruleId);
 
+    List<RuleTriggerCondition> findByRuleIdIn(List<String> ruleIds);
+
     void deleteByRuleId(String ruleId);
 }

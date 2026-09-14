@@ -8,6 +8,7 @@ import java.util.stream.Collectors;
 import java.util.UUID;
 
 import com.nexarank.api.model.MerchRule;
+import com.nexarank.api.model.RuleTriggerCondition;
 import com.nexarank.api.model.Tenant;
 import com.nexarank.api.repository.MerchRuleRepository;
 import com.nexarank.api.repository.TenantRepository;
@@ -637,9 +638,21 @@ public class MerchRuleService {
         String projectId = TenantContext.getProjectId();
         boolean isWildcard = query == null || query.isBlank() || query.equals("*");
 
-        List<MerchRule> allRules = repository.findByTenantIdAndProjectId(tenantId, projectId);
-        List<MerchRule> result = allRules.stream()
-                .filter(r -> r.getStatus() == MerchRule.RuleStatus.LIVE && r.isEnabled())
+        // NR-172: status/enabled filtering pushed into the query itself, so
+        // DRAFT/DISABLED rules are never loaded for this path at all — this
+        // used to load every rule for the project (findByTenantIdAndProjectId)
+        // and filter status/enabled in Java. Trigger conditions for the
+        // resulting candidate set are then fetched in one batched query
+        // (getConditionsForRules) instead of one findByRuleId... query per
+        // rule inside the filter below — that per-rule query was an N+1
+        // hitting the DB on every single /rules/enrich call.
+        List<MerchRule> candidateRules = repository.findByTenantIdAndProjectIdAndStatusAndEnabled(
+                tenantId, projectId, MerchRule.RuleStatus.LIVE, true);
+        List<String> candidateIds = candidateRules.stream().map(MerchRule::getId).toList();
+        java.util.Map<String, List<RuleTriggerCondition>> conditionsByRuleId =
+                triggerService.getConditionsForRules(candidateIds);
+
+        List<MerchRule> result = candidateRules.stream()
                 .filter(r -> r.getActivateAt() == null || r.getActivateAt().isBefore(now))
                 .filter(r -> r.getExpireAt() == null || r.getExpireAt().isAfter(now))
                 .filter(r -> {
@@ -653,7 +666,8 @@ public class MerchRuleService {
                     // controller-level rejection was removed.
                     boolean queryMatches = !r.isRequireQuery()
                             || (!isWildcard && query != null && containsRuleQuery(query, r.getQuery()));
-                    boolean condMatch = triggerService.conditionsMatch(r.getId(),
+                    boolean condMatch = triggerService.conditionsMatch(
+                            conditionsByRuleId.getOrDefault(r.getId(), List.of()),
                             selectedFacets != null ? selectedFacets : java.util.Map.of());
                     if (!queryMatches) return false;
                     return condMatch;

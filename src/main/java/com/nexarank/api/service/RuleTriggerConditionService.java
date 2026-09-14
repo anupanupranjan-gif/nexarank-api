@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Phase 23 / NR-37 v2: multi-condition facet trigger logic.
@@ -80,6 +81,20 @@ public class RuleTriggerConditionService {
         return conditions;
     }
 
+    /**
+     * NR-172: batched sibling of getConditions() for the hot /rules/enrich
+     * path — fetches trigger conditions for every candidate rule in a single
+     * query instead of one query per rule, then groups them in memory by
+     * ruleId. A rule with no conditions simply has no entry in the returned
+     * map (callers should treat a missing key the same as an empty list).
+     */
+    public Map<String, List<RuleTriggerCondition>> getConditionsForRules(List<String> ruleIds) {
+        if (ruleIds == null || ruleIds.isEmpty()) return Map.of();
+        List<RuleTriggerCondition> all = repository.findByRuleIdIn(ruleIds);
+        all.forEach(c -> c.setFacetValues(deserialize(c.getFacetValuesJson())));
+        return all.stream().collect(Collectors.groupingBy(RuleTriggerCondition::getRuleId));
+    }
+
     // ── Matching ──────────────────────────────────────────────────────────────
 
     /**
@@ -89,7 +104,11 @@ public class RuleTriggerConditionService {
      * If the rule has no conditions, returns true (fires on query/requireQuery logic alone).
      */
     public boolean conditionsMatch(String ruleId, Map<String, String> selectedFacets) {
-        List<RuleTriggerCondition> conditions = getConditions(ruleId);
+        return conditionsMatch(getConditions(ruleId), selectedFacets);
+    }
+
+    /** NR-172: same matching logic as above, for a caller that already has the rule's conditions batched (avoids a per-rule DB call). */
+    public boolean conditionsMatch(List<RuleTriggerCondition> conditions, Map<String, String> selectedFacets) {
         if (conditions.isEmpty()) return true;
         if (selectedFacets == null || selectedFacets.isEmpty()) return false;
 
