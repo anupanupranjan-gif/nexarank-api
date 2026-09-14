@@ -13,6 +13,8 @@ import com.nexarank.api.repository.ProjectRepository;
 import com.nexarank.api.repository.UserProjectRepository;
 import com.nexarank.api.repository.UserRepository;
 import com.nexarank.api.security.TenantContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -36,6 +38,8 @@ import java.util.Map;
  */
 @Service
 public class AuditQueryService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuditQueryService.class);
 
     private final AuditEventRepository auditEventRepository;
     private final ApiAccessEventRepository apiAccessEventRepository;
@@ -161,6 +165,7 @@ public class AuditQueryService {
         try {
             return objectMapper.readValue(json, List.class);
         } catch (Exception e) {
+            log.warn("Failed to parse audit field diff: {}", e.getMessage());
             return List.of();
         }
     }
