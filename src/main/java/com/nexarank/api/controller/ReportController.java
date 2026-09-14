@@ -35,30 +35,17 @@ public class ReportController {
         String recipient = body.getOrDefault("recipient", "modernreliability@gmail.com");
         String tenantId  = body.getOrDefault("tenantId", "default");
         String projectId = body.getOrDefault("projectId", "main");
-        try {
-            emailReportService.sendTestReport(tenantId, projectId, recipient);
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Test report sent to " + recipient
-            ));
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Map.of(
-                "success", false,
-                "message", e.getMessage()
-            ));
-        }
+        emailReportService.sendTestReport(tenantId, projectId, recipient);
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "message", "Test report sent to " + recipient
+        ));
     }
 
     @PostMapping("/send-now")
     public ResponseEntity<Map<String, Object>> sendNow() {
-        try {
-            emailReportService.sendWeeklyDigest();
-            return ResponseEntity.ok(Map.of("success", true, "message", "Weekly digest sent"));
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Map.of(
-                "success", false, "message", e.getMessage()
-            ));
-        }
+        emailReportService.sendWeeklyDigest();
+        return ResponseEntity.ok(Map.of("success", true, "message", "Weekly digest sent"));
     }
 
     @PostMapping("/send-monthly-test")
@@ -67,29 +54,16 @@ public class ReportController {
         String recipient = body.getOrDefault("recipient", "modernreliability@gmail.com");
         String tenantId  = body.getOrDefault("tenantId", "default");
         String projectId = body.getOrDefault("projectId", "main");
-        try {
-            monthlySummaryEmailService.sendTestMonthlySummary(tenantId, projectId, recipient);
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Test monthly summary sent to " + recipient
-            ));
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Map.of(
-                "success", false,
-                "message", e.getMessage()
-            ));
-        }
+        monthlySummaryEmailService.sendTestMonthlySummary(tenantId, projectId, recipient);
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "message", "Test monthly summary sent to " + recipient
+        ));
     }
 
     @PostMapping("/send-monthly-now")
     public ResponseEntity<Map<String, Object>> sendMonthlyNow() {
-        try {
-            monthlySummaryEmailService.sendMonthlySummaries();
-            return ResponseEntity.ok(Map.of("success", true, "message", "Monthly summaries sent"));
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Map.of(
-                "success", false, "message", e.getMessage()
-            ));
-        }
+        monthlySummaryEmailService.sendMonthlySummaries();
+        return ResponseEntity.ok(Map.of("success", true, "message", "Monthly summaries sent"));
     }
 }
