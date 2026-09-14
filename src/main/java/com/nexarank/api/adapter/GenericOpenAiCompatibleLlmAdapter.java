@@ -98,7 +98,13 @@ public class GenericOpenAiCompatibleLlmAdapter implements LlmPort {
 
     @Override
     public String classify(String query, String promptTemplate, LlmConfig config) {
-        String prompt = String.format(promptTemplate, query);
+        String prompt;
+        try {
+            prompt = String.format(promptTemplate, query);
+        } catch (Exception e) {
+            log.warn("OpenAI-compatible classify: malformed prompt template: {}", e.getMessage());
+            return null;
+        }
         String content = chatComplete(prompt, config, 0.1, 15);
         if (content == null) return null;
 
