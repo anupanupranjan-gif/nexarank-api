@@ -154,6 +154,17 @@ public class LlmConfig {
             : DEFAULT_PROMPT_TEMPLATES.get(key);
     }
 
+    /**
+     * Included in every GET/POST /llm-config response so the UI (and any
+     * direct API consumer) can show each key's actual default text — e.g. as
+     * a textarea placeholder — rather than a generic "leave blank for
+     * default" message that doesn't say what the default is or which
+     * placeholders (%s, {{PRODUCT}}) it expects.
+     */
+    public Map<String, String> getDefaultPromptTemplates() {
+        return DEFAULT_PROMPT_TEMPLATES;
+    }
+
     public String getId()                              { return id; }
     public void setId(String id)                       { this.id = id; }
     public String getTenantId()                        { return tenantId; }
