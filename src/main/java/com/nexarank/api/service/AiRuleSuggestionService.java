@@ -296,12 +296,8 @@ public class AiRuleSuggestionService {
      *                       so the same LLM-calling machinery serves both suggestion sources.
      */
     private String callLlmForSynonyms(String query, String promptContext, LlmConfig llmConfig) {
-        String prompt = String.format(
-            "A customer searched for '%s' on an eCommerce site%s. " +
-            "Suggest 2-3 alternative search terms or synonyms. " +
-            "Reply with ONLY the synonyms separated by commas. No explanation.",
-            query, promptContext
-        );
+        String template = llmConfig.getEffectivePromptTemplate(LlmConfig.PROMPT_KEY_SUGGESTION);
+        String prompt = String.format(template, query, promptContext);
         return llmAdapterFactory.getAdapter(llmConfig).rewrite(query, prompt + "\n%s\nSynonyms:", llmConfig);
     }
 

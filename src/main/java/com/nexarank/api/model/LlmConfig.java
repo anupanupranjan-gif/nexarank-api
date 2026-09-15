@@ -3,6 +3,7 @@ package com.nexarank.api.model;
 
 import jakarta.persistence.*;
 import java.time.Instant;
+import java.util.Map;
 
 @Entity
 @Table(name = "llm_config")
@@ -34,12 +35,21 @@ public class LlmConfig {
     @Column(name = "timeout_seconds")
     private int timeoutSeconds = 2;
 
-    @Column(name = "prompt_template", columnDefinition = "TEXT")
-    private String promptTemplate;
+    /**
+     * NR-176: JSON-serialized {@code Map<String,String>} keyed by PROMPT_KEY_*,
+     * one map for all admin-configurable prompt templates (rewrite, classification,
+     * suggestion, zero_result_recovery, judgment). Replaces the two separate
+     * promptTemplate/classificationPromptTemplate TEXT columns from NR-174 —
+     * same JSON-column-plus-transient-field pattern as
+     * ContentRule.contentPayloadJson/contentPayload and
+     * MerchRule.pinnedIdsJson/pinnedIds. Serialization happens in
+     * LlmConfigService, not here.
+     */
+    @Column(name = "prompt_templates", columnDefinition = "TEXT")
+    private String promptTemplatesJson;
 
-    /** NR-174: same admin-configurable pattern as promptTemplate, for LLM_QUERY_CLASSIFICATION instead of LLM_QUERY_REWRITE. */
-    @Column(name = "classification_prompt_template", columnDefinition = "TEXT")
-    private String classificationPromptTemplate;
+    @Transient
+    private Map<String, String> promptTemplates;
 
     /**
      * NR-124: optional extra HTTP headers for OPENAI_COMPATIBLE providers that
@@ -77,34 +87,71 @@ public class LlmConfig {
 
     public enum ConnectionStatus { UNTESTED, CONNECTED, FAILED }
 
-    // ── Default prompt template used if none configured per project ───────────
-    public static final String DEFAULT_PROMPT_TEMPLATE =
-            "eCommerce search keywords for: %s\nKeywords (5 words max):";
-
-    public String getEffectivePromptTemplate() {
-        return (promptTemplate != null && !promptTemplate.isBlank())
-            ? promptTemplate
-            : DEFAULT_PROMPT_TEMPLATE;
-    }
+    // ── NR-176: named keys for every admin-configurable prompt template ────────
+    public static final String PROMPT_KEY_REWRITE = "rewrite";
+    public static final String PROMPT_KEY_CLASSIFICATION = "classification";
+    public static final String PROMPT_KEY_SUGGESTION = "suggestion";
+    public static final String PROMPT_KEY_ZERO_RESULT_RECOVERY = "zero_result_recovery";
+    public static final String PROMPT_KEY_JUDGMENT = "judgment";
 
     /**
-     * NR-174: was a hardcoded constant on LlmQueryClassificationStage — moved
-     * here as the default so it follows the same admin-configurable pattern
-     * as DEFAULT_PROMPT_TEMPLATE/getEffectivePromptTemplate() above.
+     * Default text for each prompt key, used whenever promptTemplates has no
+     * (or a blank) override for that key. These are the same literal strings
+     * that used to be hardcoded as hidden constants on LlmQueryRewriteStage's
+     * template (pre-NR-174), LlmQueryClassificationStage (pre-NR-174),
+     * AiRuleSuggestionService.callLlmForSynonyms, LlmZeroResultRecoveryService,
+     * and LlmJudgmentService — only their storage location changed.
+     *
+     * - "suggestion" keeps its original two-%s shape: the first %s is the
+     *   query, the second is the caller-supplied promptContext clause (e.g.
+     *   " and got zero results"). Callers do their own
+     *   String.format(template, query, promptContext).
+     * - "judgment" keeps its original one-%s-plus-{{PRODUCT}}-marker shape:
+     *   %s is the query, {{PRODUCT}} is replaced via String.replace before
+     *   the template is handed to LlmPort.classify() (which itself does no
+     *   further substitution on this key).
      */
-    public static final String DEFAULT_CLASSIFICATION_PROMPT_TEMPLATE =
+    public static final Map<String, String> DEFAULT_PROMPT_TEMPLATES = Map.of(
+            PROMPT_KEY_REWRITE,
+            "eCommerce search keywords for: %s\nKeywords (5 words max):",
+
+            PROMPT_KEY_CLASSIFICATION,
             "Classify the eCommerce search intent of the query into exactly one label.\n" +
             "NAVIGATIONAL: user wants a specific product, brand+model, or part/SKU number.\n" +
             "TRANSACTIONAL: user is ready to buy or is comparing price/deals (buy, cheap, deal, best, vs).\n" +
             "CATEGORICAL: user is browsing a general product category, not a specific item.\n" +
             "INFORMATIONAL: broad research query, none of the above.\n" +
             "Respond with only the single label word, nothing else.\n\n" +
-            "Query: %s\nLabel:";
+            "Query: %s\nLabel:",
 
-    public String getEffectiveClassificationPromptTemplate() {
-        return (classificationPromptTemplate != null && !classificationPromptTemplate.isBlank())
-            ? classificationPromptTemplate
-            : DEFAULT_CLASSIFICATION_PROMPT_TEMPLATE;
+            PROMPT_KEY_SUGGESTION,
+            "A customer searched for '%s' on an eCommerce site%s. " +
+            "Suggest 2-3 alternative search terms or synonyms. " +
+            "Reply with ONLY the synonyms separated by commas. No explanation.",
+
+            PROMPT_KEY_ZERO_RESULT_RECOVERY,
+            "A customer searched for '%s' on an eCommerce site and got ZERO results. " +
+            "Suggest ONE alternative search query that is more likely to return results — " +
+            "broaden an overly-specific term, fix a likely typo/misspelling, or use a more " +
+            "common synonym. Reply with ONLY the alternative query text. No explanation, no quotes.",
+
+            PROMPT_KEY_JUDGMENT,
+            "Rate how relevant this product is to the search query, on a 5-point scale.\n" +
+            "PERFECT: exactly what the customer searched for.\n" +
+            "EXCELLENT: a very strong match, minor differences at most.\n" +
+            "GOOD: a reasonable match, same general category/purpose.\n" +
+            "FAIR: loosely related, would not fully satisfy the search.\n" +
+            "BAD: not relevant to the search at all.\n" +
+            "Respond with only the single label word.\n\n" +
+            "Query: %s\nProduct: {{PRODUCT}}\nLabel:"
+    );
+
+    /** Returns the configured override for {@code key}, or its default when unset/blank. */
+    public String getEffectivePromptTemplate(String key) {
+        String override = promptTemplates != null ? promptTemplates.get(key) : null;
+        return (override != null && !override.isBlank())
+            ? override
+            : DEFAULT_PROMPT_TEMPLATES.get(key);
     }
 
     public String getId()                              { return id; }
@@ -123,10 +170,10 @@ public class LlmConfig {
     public void setModel(String m)                     { this.model = m; }
     public int getTimeoutSeconds()                     { return timeoutSeconds; }
     public void setTimeoutSeconds(int t)               { this.timeoutSeconds = t; }
-    public String getPromptTemplate()                  { return promptTemplate; }
-    public void setPromptTemplate(String p)            { this.promptTemplate = p; }
-    public String getClassificationPromptTemplate()    { return classificationPromptTemplate; }
-    public void setClassificationPromptTemplate(String p) { this.classificationPromptTemplate = p; }
+    public String getPromptTemplatesJson()              { return promptTemplatesJson; }
+    public void setPromptTemplatesJson(String j)        { this.promptTemplatesJson = j; }
+    public Map<String, String> getPromptTemplates()     { return promptTemplates; }
+    public void setPromptTemplates(Map<String, String> p) { this.promptTemplates = p; }
     public String getCustomHeaders()                   { return customHeaders; }
     public void setCustomHeaders(String h)             { this.customHeaders = h; }
     public ConnectionStatus getLastStatus()            { return lastStatus; }

@@ -44,16 +44,6 @@ public class LlmJudgmentService {
     private static final Map<String, Integer> LABEL_TO_GRADE = Map.of(
             "PERFECT", 4, "EXCELLENT", 3, "GOOD", 2, "FAIR", 1, "BAD", 0);
 
-    private static final String PROMPT_TEMPLATE =
-            "Rate how relevant this product is to the search query, on a 5-point scale.\n" +
-            "PERFECT: exactly what the customer searched for.\n" +
-            "EXCELLENT: a very strong match, minor differences at most.\n" +
-            "GOOD: a reasonable match, same general category/purpose.\n" +
-            "FAIR: loosely related, would not fully satisfy the search.\n" +
-            "BAD: not relevant to the search at all.\n" +
-            "Respond with only the single label word.\n\n" +
-            "Query: %s\nProduct: {{PRODUCT}}\nLabel:";
-
     @Value("${nexarank.search-api.base-url:http://search-api.default.svc.cluster.local/api/v1}")
     private String searchApiBaseUrl;
 
@@ -106,7 +96,8 @@ public class LlmJudgmentService {
             }
 
             try {
-                String prompt = PROMPT_TEMPLATE.replace("{{PRODUCT}}", title != null ? title : productId);
+                String template = llmConfig.getEffectivePromptTemplate(LlmConfig.PROMPT_KEY_JUDGMENT);
+                String prompt = template.replace("{{PRODUCT}}", title != null ? title : productId);
                 String raw = adapter.classify(query, prompt, llmConfig);
                 Integer grade = raw == null ? null : GRADE_LABELS.stream()
                         .filter(raw::contains)

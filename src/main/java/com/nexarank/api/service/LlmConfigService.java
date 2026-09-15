@@ -1,6 +1,8 @@
 // Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 package com.nexarank.api.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexarank.api.adapter.LlmAdapterFactory;
 import com.nexarank.api.model.LlmConfig;
 import com.nexarank.api.port.LlmPort;
@@ -11,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -21,11 +24,14 @@ public class LlmConfigService {
 
     private final LlmConfigRepository repository;
     private final LlmAdapterFactory adapterFactory;
+    private final ObjectMapper objectMapper;
 
     public LlmConfigService(LlmConfigRepository repository,
-                             LlmAdapterFactory adapterFactory) {
+                             LlmAdapterFactory adapterFactory,
+                             ObjectMapper objectMapper) {
         this.repository     = repository;
         this.adapterFactory = adapterFactory;
+        this.objectMapper   = objectMapper;
     }
 
     /**
@@ -34,7 +40,8 @@ public class LlmConfigService {
      */
     public Optional<LlmConfig> getConfig() {
         return repository.findFirstByTenantIdAndProjectId(
-            TenantContext.getTenantId(), TenantContext.getProjectId());
+                TenantContext.getTenantId(), TenantContext.getProjectId())
+            .map(this::withDeserializedFields);
     }
 
     public LlmConfig saveConfig(LlmConfig config) {
@@ -46,11 +53,36 @@ public class LlmConfigService {
         if (config.getCreatedAt() == null) config.setCreatedAt(Instant.now());
         config.setUpdatedAt(Instant.now());
         config.setLastStatus(LlmConfig.ConnectionStatus.UNTESTED);
+        serializeTransientFields(config);
 
         LlmConfig saved = repository.save(config);
         log.info("LLM config saved: provider={} model={} endpoint={}",
             config.getProvider(), config.getModel(), config.getEndpoint());
-        return saved;
+        return withDeserializedFields(saved);
+    }
+
+    // ── NR-176: JSON <-> transient field helpers (promptTemplatesJson/promptTemplates) ──
+
+    private LlmConfig withDeserializedFields(LlmConfig config) {
+        try {
+            if (config.getPromptTemplatesJson() != null && !config.getPromptTemplatesJson().isBlank()) {
+                config.setPromptTemplates(objectMapper.readValue(config.getPromptTemplatesJson(),
+                        new TypeReference<Map<String, String>>() {}));
+            }
+        } catch (Exception e) {
+            log.warn("Failed to deserialize prompt templates for LLM config {}: {}", config.getId(), e.getMessage());
+        }
+        return config;
+    }
+
+    private void serializeTransientFields(LlmConfig config) {
+        try {
+            if (config.getPromptTemplates() != null) {
+                config.setPromptTemplatesJson(objectMapper.writeValueAsString(config.getPromptTemplates()));
+            }
+        } catch (Exception e) {
+            log.warn("Failed to serialize prompt templates for LLM config {}: {}", config.getId(), e.getMessage());
+        }
     }
 
     public TestResult testConnection(String configId) {

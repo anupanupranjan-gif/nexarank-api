@@ -32,13 +32,6 @@ public class LlmZeroResultRecoveryService {
 
     private static final Logger log = LoggerFactory.getLogger(LlmZeroResultRecoveryService.class);
 
-    // Exactly one %s — rewrite() does String.format(promptTemplate, query) internally.
-    private static final String PROMPT_TEMPLATE =
-            "A customer searched for '%s' on an eCommerce site and got ZERO results. " +
-            "Suggest ONE alternative search query that is more likely to return results — " +
-            "broaden an overly-specific term, fix a likely typo/misspelling, or use a more " +
-            "common synonym. Reply with ONLY the alternative query text. No explanation, no quotes.";
-
     private final LlmConfigService llmConfigService;
     private final LlmAdapterFactory llmAdapterFactory;
     private final PipelineStageConfigService stageConfigService;
@@ -76,7 +69,8 @@ public class LlmZeroResultRecoveryService {
 
         try {
             LlmPort adapter = llmAdapterFactory.getAdapter(llmConfig);
-            String suggestion = adapter.rewrite(query, PROMPT_TEMPLATE, llmConfig);
+            String template = llmConfig.getEffectivePromptTemplate(LlmConfig.PROMPT_KEY_ZERO_RESULT_RECOVERY);
+            String suggestion = adapter.rewrite(query, template, llmConfig);
             if (suggestion == null) return null;
 
             String cleaned = suggestion.strip();

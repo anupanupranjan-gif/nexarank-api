@@ -73,7 +73,7 @@ public class LlmQueryRewriteStage implements PipelineStage {
             LlmPort adapter = adapterFactory.getAdapter(config);
             String rewritten = adapter.rewrite(
                 input,
-                config.getEffectivePromptTemplate(),
+                config.getEffectivePromptTemplate(LlmConfig.PROMPT_KEY_REWRITE),
                 config
             );
 

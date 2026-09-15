@@ -42,12 +42,13 @@ public class LlmQueryClassificationStage implements PipelineStage {
     private static final List<String> VALID_CLASSES =
             List.of("NAVIGATIONAL", "TRANSACTIONAL", "CATEGORICAL", "INFORMATIONAL");
 
-    // NR-174: the prompt template itself used to be hardcoded here — it's now
-    // admin-configurable (LlmConfig.classificationPromptTemplate, editable via
-    // the LLM Config UI), same pattern LLM_QUERY_REWRITE's template already
-    // followed. VALID_CLASSES above stays a code constant on purpose: the
-    // rest of the pipeline depends on exactly these four label values, so
-    // it's the classification contract, not tunable configuration.
+    // NR-174/NR-176: the prompt template itself used to be hardcoded here —
+    // it's now admin-configurable (LlmConfig.promptTemplates, keyed by
+    // PROMPT_KEY_CLASSIFICATION, editable via the LLM Config UI), same
+    // pattern LLM_QUERY_REWRITE's template already followed. VALID_CLASSES
+    // above stays a code constant on purpose: the rest of the pipeline
+    // depends on exactly these four label values, so it's the classification
+    // contract, not tunable configuration.
 
     private final LlmConfigService llmConfigService;
     private final LlmAdapterFactory adapterFactory;
@@ -79,7 +80,7 @@ public class LlmQueryClassificationStage implements PipelineStage {
 
         try {
             LlmPort adapter = adapterFactory.getAdapter(config);
-            String raw = adapter.classify(query, config.getEffectiveClassificationPromptTemplate(), config);
+            String raw = adapter.classify(query, config.getEffectivePromptTemplate(LlmConfig.PROMPT_KEY_CLASSIFICATION), config);
             long took = System.currentTimeMillis() - start;
 
             String matched = raw == null ? null : VALID_CLASSES.stream()
