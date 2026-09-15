@@ -35,7 +35,7 @@ public class SearchQualityService {
     @Value("${nexarank.search-api.base-url:http://search-api.default.svc.cluster.local/api/v1}")
     private String searchApiBaseUrl;
 
-    @Value("${nexarank.search-api.api-key:searchx-dev-key-2026}")
+    @Value("${nexarank.search-api.api-key}")
     private String searchApiKey;
 
     private final RestTemplate restTemplate;

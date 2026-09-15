@@ -84,7 +84,7 @@ nexarank:
     secure: ${COOKIE_SECURE:false}
   search-api:
     base-url: http://search-api.default.svc.cluster.local/api/v1
-    api-key: searchx-dev-key-2026
+    api-key: ${SEARCH_API_KEY}
   report:
     from: modernreliability@gmail.com
     cron: "0 0 8 * * MON"
