@@ -42,14 +42,12 @@ public class LlmQueryClassificationStage implements PipelineStage {
     private static final List<String> VALID_CLASSES =
             List.of("NAVIGATIONAL", "TRANSACTIONAL", "CATEGORICAL", "INFORMATIONAL");
 
-    private static final String PROMPT_TEMPLATE =
-            "Classify the eCommerce search intent of the query into exactly one label.\n" +
-            "NAVIGATIONAL: user wants a specific product, brand+model, or part/SKU number.\n" +
-            "TRANSACTIONAL: user is ready to buy or is comparing price/deals (buy, cheap, deal, best, vs).\n" +
-            "CATEGORICAL: user is browsing a general product category, not a specific item.\n" +
-            "INFORMATIONAL: broad research query, none of the above.\n" +
-            "Respond with only the single label word, nothing else.\n\n" +
-            "Query: %s\nLabel:";
+    // NR-174: the prompt template itself used to be hardcoded here — it's now
+    // admin-configurable (LlmConfig.classificationPromptTemplate, editable via
+    // the LLM Config UI), same pattern LLM_QUERY_REWRITE's template already
+    // followed. VALID_CLASSES above stays a code constant on purpose: the
+    // rest of the pipeline depends on exactly these four label values, so
+    // it's the classification contract, not tunable configuration.
 
     private final LlmConfigService llmConfigService;
     private final LlmAdapterFactory adapterFactory;
@@ -81,7 +79,7 @@ public class LlmQueryClassificationStage implements PipelineStage {
 
         try {
             LlmPort adapter = adapterFactory.getAdapter(config);
-            String raw = adapter.classify(query, PROMPT_TEMPLATE, config);
+            String raw = adapter.classify(query, config.getEffectiveClassificationPromptTemplate(), config);
             long took = System.currentTimeMillis() - start;
 
             String matched = raw == null ? null : VALID_CLASSES.stream()

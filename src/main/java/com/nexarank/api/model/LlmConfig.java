@@ -37,6 +37,10 @@ public class LlmConfig {
     @Column(name = "prompt_template", columnDefinition = "TEXT")
     private String promptTemplate;
 
+    /** NR-174: same admin-configurable pattern as promptTemplate, for LLM_QUERY_CLASSIFICATION instead of LLM_QUERY_REWRITE. */
+    @Column(name = "classification_prompt_template", columnDefinition = "TEXT")
+    private String classificationPromptTemplate;
+
     /**
      * NR-124: optional extra HTTP headers for OPENAI_COMPATIBLE providers that
      * need something beyond standard "Authorization: Bearer {apiKey}" — JSON
@@ -83,6 +87,26 @@ public class LlmConfig {
             : DEFAULT_PROMPT_TEMPLATE;
     }
 
+    /**
+     * NR-174: was a hardcoded constant on LlmQueryClassificationStage — moved
+     * here as the default so it follows the same admin-configurable pattern
+     * as DEFAULT_PROMPT_TEMPLATE/getEffectivePromptTemplate() above.
+     */
+    public static final String DEFAULT_CLASSIFICATION_PROMPT_TEMPLATE =
+            "Classify the eCommerce search intent of the query into exactly one label.\n" +
+            "NAVIGATIONAL: user wants a specific product, brand+model, or part/SKU number.\n" +
+            "TRANSACTIONAL: user is ready to buy or is comparing price/deals (buy, cheap, deal, best, vs).\n" +
+            "CATEGORICAL: user is browsing a general product category, not a specific item.\n" +
+            "INFORMATIONAL: broad research query, none of the above.\n" +
+            "Respond with only the single label word, nothing else.\n\n" +
+            "Query: %s\nLabel:";
+
+    public String getEffectiveClassificationPromptTemplate() {
+        return (classificationPromptTemplate != null && !classificationPromptTemplate.isBlank())
+            ? classificationPromptTemplate
+            : DEFAULT_CLASSIFICATION_PROMPT_TEMPLATE;
+    }
+
     public String getId()                              { return id; }
     public void setId(String id)                       { this.id = id; }
     public String getTenantId()                        { return tenantId; }
@@ -101,6 +125,8 @@ public class LlmConfig {
     public void setTimeoutSeconds(int t)               { this.timeoutSeconds = t; }
     public String getPromptTemplate()                  { return promptTemplate; }
     public void setPromptTemplate(String p)            { this.promptTemplate = p; }
+    public String getClassificationPromptTemplate()    { return classificationPromptTemplate; }
+    public void setClassificationPromptTemplate(String p) { this.classificationPromptTemplate = p; }
     public String getCustomHeaders()                   { return customHeaders; }
     public void setCustomHeaders(String h)             { this.customHeaders = h; }
     public ConnectionStatus getLastStatus()            { return lastStatus; }
