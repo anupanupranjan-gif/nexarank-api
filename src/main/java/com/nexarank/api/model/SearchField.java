@@ -11,7 +11,8 @@ import java.util.List;
 public class SearchField {
 
     private String name;
-    private String type;        // keyword, text, integer, float, date, boolean
+    private String type;        // raw native engine type string (e.g. ES "scaled_float", Solr "pint") — for debugging/support only, not for downstream logic to branch on
+    private AttributeType attributeType = AttributeType.UNKNOWN; // canonical type, populated consistently by every SearchEnginePort adapter
     private boolean indexed;
     private boolean stored;
     private boolean facetable;  // can be used as a facet
@@ -34,6 +35,9 @@ public class SearchField {
 
     public String getType() { return type; }
     public void setType(String type) { this.type = type; }
+
+    public AttributeType getAttributeType() { return attributeType; }
+    public void setAttributeType(AttributeType attributeType) { this.attributeType = attributeType; }
 
     public boolean isIndexed() { return indexed; }
     public void setIndexed(boolean indexed) { this.indexed = indexed; }

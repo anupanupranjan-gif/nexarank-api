@@ -66,20 +66,16 @@ public class ElasticsearchAdapter implements SearchEnginePort {
                 // Skip internal fields and vector fields
                 if (name.startsWith("_") || type.equals("dense_vector")) return;
 
+                AttributeType attributeType = mapEsType(type);
+
                 SearchField field = new SearchField();
                 field.setName(name);
                 field.setType(type);
+                field.setAttributeType(attributeType);
                 field.setIndexed(true);
                 field.setStored(true);
-                field.setFacetable(type.equals("keyword") ||
-                                   type.equals("boolean") ||
-                                   type.equals("integer") ||
-                                   type.equals("float") ||
-                                   type.equals("double"));
-                field.setSortable(type.equals("keyword") ||
-                                  type.equals("integer") ||
-                                  type.equals("float") ||
-                                  type.equals("date"));
+                field.setFacetable(isFacetable(attributeType));
+                field.setSortable(isSortable(attributeType));
                 fields.add(field);
 
                 // ES's default dynamic mapping adds a "keyword" multi-field under
@@ -93,20 +89,16 @@ public class ElasticsearchAdapter implements SearchEnginePort {
                     JsonNode subDef = subEntry.getValue();
                     String subType = subDef.path("type").asText("object");
 
+                    AttributeType subAttributeType = mapEsType(subType);
+
                     SearchField subField = new SearchField();
                     subField.setName(name + "." + subName);
                     subField.setType(subType);
+                    subField.setAttributeType(subAttributeType);
                     subField.setIndexed(true);
                     subField.setStored(false);
-                    subField.setFacetable(subType.equals("keyword") ||
-                                          subType.equals("boolean") ||
-                                          subType.equals("integer") ||
-                                          subType.equals("float") ||
-                                          subType.equals("double"));
-                    subField.setSortable(subType.equals("keyword") ||
-                                         subType.equals("integer") ||
-                                         subType.equals("float") ||
-                                         subType.equals("date"));
+                    subField.setFacetable(isFacetable(subAttributeType));
+                    subField.setSortable(isSortable(subAttributeType));
                     fields.add(subField);
                 });
             });
@@ -118,6 +110,45 @@ public class ElasticsearchAdapter implements SearchEnginePort {
             log.error("Failed to get fields from ES", e);
             return List.of();
         }
+    }
+
+    /**
+     * Canonicalizes a raw Elasticsearch mapping "type" value into the shared
+     * AttributeType vocabulary. Any ES type not explicitly listed here maps
+     * to UNKNOWN — never silently falls through to KEYWORD or any other
+     * member, unlike the string-equality checks this replaces.
+     */
+    private AttributeType mapEsType(String esType) {
+        if (esType == null) return AttributeType.UNKNOWN;
+        return switch (esType) {
+            case "keyword", "constant_keyword", "wildcard" -> AttributeType.KEYWORD;
+            case "text", "match_only_text", "search_as_you_type" -> AttributeType.TEXT;
+            case "long", "unsigned_long" -> AttributeType.LONG;
+            case "integer", "short", "byte" -> AttributeType.INTEGER;
+            case "float", "half_float" -> AttributeType.FLOAT;
+            case "double", "scaled_float" -> AttributeType.DOUBLE;
+            case "boolean" -> AttributeType.BOOLEAN;
+            case "date", "date_nanos" -> AttributeType.DATE;
+            case "geo_point", "geo_shape" -> AttributeType.GEO;
+            // nested/object/dense_vector and anything else ES might report:
+            // not a scalar attribute type this system can facet/boost/sort
+            // on, so explicit UNKNOWN rather than a guessed default.
+            default -> AttributeType.UNKNOWN;
+        };
+    }
+
+    private boolean isFacetable(AttributeType type) {
+        return switch (type) {
+            case KEYWORD, BOOLEAN, INTEGER, LONG, FLOAT, DOUBLE -> true;
+            default -> false;
+        };
+    }
+
+    private boolean isSortable(AttributeType type) {
+        return switch (type) {
+            case KEYWORD, INTEGER, LONG, FLOAT, DOUBLE, DATE -> true;
+            default -> false;
+        };
     }
 
     @Override

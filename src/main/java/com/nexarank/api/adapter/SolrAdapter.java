@@ -70,7 +70,8 @@ public class SolrAdapter implements SearchEnginePort {
 
                 SearchField field = new SearchField();
                 field.setName(name);
-                field.setType(mapSolrType(type));
+                field.setType(type);
+                field.setAttributeType(mapSolrType(type));
                 field.setIndexed(indexed);
                 field.setStored(stored);
                 field.setFacetable(!multiValued &&
@@ -262,14 +263,23 @@ public class SolrAdapter implements SearchEnginePort {
             .send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 
-    private String mapSolrType(String solrType) {
-        if (solrType == null) return "string";
+    /**
+     * Same recognized-type checks as before this became enum-typed; the one
+     * deliberate behavior change is the final fallback, which used to return
+     * the string "keyword" for anything unrecognized (e.g. a custom Solr
+     * fieldType name that doesn't contain "int"/"float"/"bool"/"date"/"text").
+     * Per the canonical AttributeType contract, unrecognized types must be
+     * explicit UNKNOWN, not silently coerced to KEYWORD.
+     */
+    private AttributeType mapSolrType(String solrType) {
+        if (solrType == null) return AttributeType.UNKNOWN;
         String t = solrType.toLowerCase();
-        if (t.contains("int") || t.contains("long")) return "integer";
-        if (t.contains("float") || t.contains("double")) return "float";
-        if (t.contains("bool")) return "boolean";
-        if (t.contains("date")) return "date";
-        if (t.contains("text")) return "text";
-        return "keyword";
+        if (t.contains("int") || t.contains("long")) return AttributeType.INTEGER;
+        if (t.contains("float") || t.contains("double")) return AttributeType.FLOAT;
+        if (t.contains("bool")) return AttributeType.BOOLEAN;
+        if (t.contains("date")) return AttributeType.DATE;
+        if (t.contains("text")) return AttributeType.TEXT;
+        if (t.contains("string") || t.contains("keyword")) return AttributeType.KEYWORD;
+        return AttributeType.UNKNOWN;
     }
 }
