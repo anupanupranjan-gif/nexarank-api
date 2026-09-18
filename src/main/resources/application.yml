@@ -85,6 +85,16 @@ nexarank:
   search-api:
     base-url: http://search-api.default.svc.cluster.local/api/v1
     api-key: ${SEARCH_API_KEY}
+  internal:
+    # Gates JwtAuthFilter's X-Tenant-Id/X-Project-Id header trust (used by
+    # search-api's internal calls to /clicks, /search-events, /zero-results,
+    # /suggestions/zero-result-recovery, and to claim a tenant on the
+    # permitAll() /rules/enrich endpoint). Blank/unset disables that path
+    # entirely rather than trusting any caller. Same shared secret must be
+    # set as NEXARANK_API_KEY in search-api's own config (nexarank.api-key,
+    # read by the nexarank-java-sdk client — it already sends this value as
+    # X-Api-Key on every call, this was just never verified on this side).
+    api-key: ${INTERNAL_API_KEY:}
   report:
     from: modernreliability@gmail.com
     cron: "0 0 8 * * MON"

@@ -64,14 +64,21 @@ public class JwtUtil {
         return List.of();
     }
 
+    /**
+     * Returns null when the claim is absent from an otherwise validly-signed
+     * token — callers (JwtAuthFilter) must treat that as an invalid token,
+     * not silently resolve it to a real tenant. A prior version defaulted
+     * to the literal strings "default"/"main" here, which aren't
+     * placeholders — they're the actual seeded tenant/project in this
+     * system — so a token missing these claims was silently authenticated
+     * into a real, live scope instead of being rejected.
+     */
     public String extractTenantId(String token) {
-        String tenantId = parseClaims(token).get("tenantId", String.class);
-        return tenantId != null ? tenantId : "default";
+        return parseClaims(token).get("tenantId", String.class);
     }
 
     public String extractProjectId(String token) {
-        String projectId = parseClaims(token).get("projectId", String.class);
-        return projectId != null ? projectId : "main";
+        return parseClaims(token).get("projectId", String.class);
     }
 
     public boolean isTokenValid(String token) {
