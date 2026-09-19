@@ -154,6 +154,7 @@ public class RuleTriggerConditionService {
             if (max != null && val > max) return false;
             return true;
         } catch (NumberFormatException e) {
+            log.warn("Failed to parse range condition value(s) for selectedValue='{}': {}", selectedValue, e.getMessage());
             return false;
         }
     }

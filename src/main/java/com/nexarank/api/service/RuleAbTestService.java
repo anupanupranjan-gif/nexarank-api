@@ -56,9 +56,9 @@ public class RuleAbTestService {
         String currentUser = getCurrentUsername();
 
         MerchRule ruleA = ruleService.getById(ruleAId)
-                .orElseThrow(() -> new IllegalArgumentException("Rule A not found: " + ruleAId));
+                .orElseThrow(() -> new com.nexarank.api.exception.RuleNotFoundException("Rule A not found: " + ruleAId));
         MerchRule ruleB = ruleService.getById(ruleBId)
-                .orElseThrow(() -> new IllegalArgumentException("Rule B not found: " + ruleBId));
+                .orElseThrow(() -> new com.nexarank.api.exception.RuleNotFoundException("Rule B not found: " + ruleBId));
 
         if (!ruleA.getQuery().equalsIgnoreCase(ruleB.getQuery())) {
             throw new IllegalArgumentException(
@@ -292,7 +292,7 @@ public class RuleAbTestService {
         String currentUser = getCurrentUsername();
 
         RuleAbTest test = findScopedById(testId)
-                .orElseThrow(() -> new IllegalArgumentException("Test not found: " + testId));
+                .orElseThrow(() -> new com.nexarank.api.exception.RuleNotFoundException("Test not found: " + testId));
 
         if (test.getStatus() != RuleAbTest.TestStatus.RUNNING) {
             throw new IllegalStateException("Test is not running: " + testId);
@@ -302,9 +302,9 @@ public class RuleAbTestService {
         String loserRuleId  = winnerVariant.equals("A") ? test.getRuleBId() : test.getRuleAId();
 
         MerchRule winner = ruleService.getById(winnerRuleId)
-                .orElseThrow(() -> new IllegalArgumentException("Winner rule not found: " + winnerRuleId));
+                .orElseThrow(() -> new com.nexarank.api.exception.RuleNotFoundException("Winner rule not found: " + winnerRuleId));
         MerchRule loser  = ruleService.getById(loserRuleId)
-                .orElseThrow(() -> new IllegalArgumentException("Loser rule not found: " + loserRuleId));
+                .orElseThrow(() -> new com.nexarank.api.exception.RuleNotFoundException("Loser rule not found: " + loserRuleId));
 
         // Archive the losing rule by disabling it and sending back to pending
         loser.setEnabled(false);
@@ -328,7 +328,7 @@ public class RuleAbTestService {
     @Transactional
     public RuleAbTest archiveTest(String testId) {
         RuleAbTest test = findScopedById(testId)
-                .orElseThrow(() -> new IllegalArgumentException("Test not found: " + testId));
+                .orElseThrow(() -> new com.nexarank.api.exception.RuleNotFoundException("Test not found: " + testId));
         test.setStatus(RuleAbTest.TestStatus.ARCHIVED);
         test.setCompletedAt(Instant.now());
         return repository.save(test);

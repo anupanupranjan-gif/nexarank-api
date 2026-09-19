@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 package com.nexarank.api.adapter;
 
+import com.nexarank.api.exception.LlmAdapterException;
 import com.nexarank.api.model.LlmConfig;
 import com.nexarank.api.port.LlmPort;
 import org.springframework.stereotype.Component;
@@ -26,11 +27,11 @@ public class LlmAdapterFactory {
 
     public LlmPort getAdapter(LlmConfig config) {
         if (config == null || config.getProvider() == null) {
-            throw new IllegalArgumentException("LlmConfig must have a provider");
+            throw new LlmAdapterException("LlmConfig must have a provider");
         }
         LlmPort adapter = adapters.get(config.getProvider());
         if (adapter == null) {
-            throw new UnsupportedOperationException(
+            throw new LlmAdapterException(
                 "No adapter for LLM provider: " + config.getProvider() +
                 ". Supported: " + adapters.keySet());
         }

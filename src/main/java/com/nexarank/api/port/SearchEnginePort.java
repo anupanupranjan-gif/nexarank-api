@@ -17,6 +17,22 @@ import java.util.List;
  *
  * Implementations: ElasticsearchAdapter, SolrAdapter
  * Selected at runtime based on SearchEngineConfig.engineType
+ *
+ * Contract, same spirit as LlmPort's "must never throw" but not identical in
+ * shape: introspection methods (testConnection/getFields/getFieldValues)
+ * must never throw at all — on failure they degrade to false/an empty list,
+ * exactly as they already do, since callers (admin UI dropdowns) have no
+ * meaningful fallback beyond "nothing to show." translateRules() is
+ * different — it runs on the query hot path and a caller that only gets an
+ * EnrichedQuery back has no way to tell "rules applied" from "translation
+ * silently produced nothing." So instead: an implementation must never let a
+ * raw/implementation-specific exception (IOException, NullPointerException,
+ * etc.) escape translateRules() untranslated — on failure it must throw
+ * RuleTranslationException, so every caller sees one well-known exception
+ * type regardless of adapter or root cause. (RuleApplicationStage, the only
+ * caller today, already catches broadly and degrades to a passthrough
+ * result regardless of exception type — this contract is about the type
+ * being meaningful to any caller, not about suppressing the failure.)
  */
 public interface SearchEnginePort {
 
@@ -48,6 +64,10 @@ public interface SearchEnginePort {
      *
      * For Elasticsearch: returns FunctionScore/Pinned query JSON
      * For Solr: returns boost query parameters and elevated documents
+     *
+     * @throws com.nexarank.api.exception.RuleTranslationException if the
+     *         rules cannot be translated — never lets a raw/implementation-
+     *         specific exception escape instead.
      */
     EnrichedQuery translateRules(
         String query,

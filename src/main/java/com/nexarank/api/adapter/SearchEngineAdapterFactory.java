@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 package com.nexarank.api.adapter;
 
+import com.nexarank.api.exception.EngineConnectionException;
 import com.nexarank.api.model.SearchEngineConfig;
 import com.nexarank.api.port.SearchEnginePort;
 import org.springframework.stereotype.Component;
@@ -29,11 +30,11 @@ public class SearchEngineAdapterFactory {
 
     public SearchEnginePort getAdapter(SearchEngineConfig config) {
         if (config == null || config.getEngineType() == null) {
-            throw new IllegalArgumentException("SearchEngineConfig must have an engineType");
+            throw new EngineConnectionException("SearchEngineConfig must have an engineType");
         }
         SearchEnginePort adapter = adapters.get(config.getEngineType());
         if (adapter == null) {
-            throw new UnsupportedOperationException(
+            throw new EngineConnectionException(
                 "No adapter found for engine type: " + config.getEngineType() +
                 ". Supported: " + adapters.keySet()
             );

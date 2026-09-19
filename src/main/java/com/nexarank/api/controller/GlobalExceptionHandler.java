@@ -1,6 +1,10 @@
 // Copyright (c) 2026 Anup Ranjan. Licensed under Apache 2.0 (https://www.apache.org/licenses/LICENSE-2.0)
 package com.nexarank.api.controller;
 
+import com.nexarank.api.exception.EngineConnectionException;
+import com.nexarank.api.exception.LlmAdapterException;
+import com.nexarank.api.exception.RuleNotFoundException;
+import com.nexarank.api.exception.RuleTranslationException;
 import com.nexarank.api.model.ErrorResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,6 +71,47 @@ public class GlobalExceptionHandler {
         log.warn("Bad request: {}", ex.getMessage());
         return ResponseEntity.badRequest()
                 .body(ErrorResponse.of("BAD_REQUEST", ex.getMessage()));
+    }
+
+    @ExceptionHandler(RuleNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleRuleNotFound(RuleNotFoundException ex) {
+        log.warn("Rule not found: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("RULE_NOT_FOUND", ex.getMessage()));
+    }
+
+    /**
+     * 502 rather than 500: the request itself was valid, but a dependency
+     * this call needed (the configured search engine, or its adapter) could
+     * not be used — the standard semantic for "upstream failed," same
+     * category LlmAdapterException below is in.
+     */
+    @ExceptionHandler(EngineConnectionException.class)
+    public ResponseEntity<ErrorResponse> handleEngineConnection(EngineConnectionException ex) {
+        log.error("Search engine connection failed: {}", ex.getMessage(), ex);
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(ErrorResponse.of("ENGINE_CONNECTION_FAILED", ex.getMessage()));
+    }
+
+    /**
+     * 500, not 502/503: unlike EngineConnectionException, this means the
+     * engine was never contacted — translateRules() failed on NexaRank's own
+     * rule data before producing any DSL, an internal processing failure,
+     * not an upstream dependency being unreachable.
+     */
+    @ExceptionHandler(RuleTranslationException.class)
+    public ResponseEntity<ErrorResponse> handleRuleTranslation(RuleTranslationException ex) {
+        log.error("Rule translation failed: {}", ex.getMessage(), ex);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ErrorResponse.of("RULE_TRANSLATION_FAILED", ex.getMessage()));
+    }
+
+    /** 502: the configured LLM provider/adapter could not be used — an upstream dependency/configuration failure. */
+    @ExceptionHandler(LlmAdapterException.class)
+    public ResponseEntity<ErrorResponse> handleLlmAdapter(LlmAdapterException ex) {
+        log.error("LLM adapter failed: {}", ex.getMessage(), ex);
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(ErrorResponse.of("LLM_ADAPTER_FAILED", ex.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)

@@ -12,6 +12,8 @@ import com.nexarank.api.repository.ProjectRepository;
 import com.nexarank.api.repository.QualityEvalResultRepository;
 import com.nexarank.api.repository.SearchEventRepository;
 import com.nexarank.api.repository.ZeroResultQueryRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -32,6 +34,8 @@ import java.util.stream.Collectors;
  */
 @Service
 public class AnalyticsService {
+
+    private static final Logger log = LoggerFactory.getLogger(AnalyticsService.class);
 
     private final ClickEventRepository clickEventRepository;
     private final MerchRuleRepository merchRuleRepository;
@@ -350,6 +354,7 @@ public class AnalyticsService {
                 facets = objectMapper.readValue(event.getSelectedFacetsJson(),
                         new com.fasterxml.jackson.core.type.TypeReference<Map<String, String>>() {});
             } catch (Exception e) {
+                log.warn("Failed to parse selectedFacetsJson for search event {}: {}", event.getId(), e.getMessage());
                 continue;
             }
             for (Map.Entry<String, String> entry : facets.entrySet()) {

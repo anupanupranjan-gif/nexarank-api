@@ -127,6 +127,15 @@ public class SolrAdapter implements SearchEnginePort {
     @Override
     public EnrichedQuery translateRules(String query, List<MerchRule> rules,
                                          SearchEngineConfig config) {
+        try {
+            return doTranslateRules(query, rules);
+        } catch (Exception e) {
+            throw new com.nexarank.api.exception.RuleTranslationException(
+                    "Failed to translate rules to Solr DSL for query='" + query + "': " + e.getMessage(), e);
+        }
+    }
+
+    private EnrichedQuery doTranslateRules(String query, List<MerchRule> rules) {
         EnrichedQuery result = new EnrichedQuery();
         result.setOriginalQuery(query);
         result.setExpandedQuery(query);
