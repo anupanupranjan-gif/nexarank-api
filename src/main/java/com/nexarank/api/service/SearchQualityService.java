@@ -306,6 +306,7 @@ public class SearchQualityService {
             return ids;
         } catch (Exception e) {
             // Fall back to positional grades if API unavailable
+            log.warn("Failed to fetch live result ids for query='{}' mode={}: {}", query, mode, e.getMessage());
             return List.of();
         }
     }
