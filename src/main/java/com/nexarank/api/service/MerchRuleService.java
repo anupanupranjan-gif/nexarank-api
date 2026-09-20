@@ -14,6 +14,8 @@ import com.nexarank.api.repository.MerchRuleRepository;
 import com.nexarank.api.repository.TenantRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -53,20 +55,54 @@ public class MerchRuleService {
         this.cacheVersionService = cacheVersionService;
     }
 
+    /**
+     * NR-184: capped at the 500 most recently updated rules, ordered by
+     * updatedAt desc, instead of an unbounded findByTenantIdAndProjectId —
+     * every real tenant today has a single-digit rule count so this changes
+     * nothing observable now, but rule count grows with a tenant's
+     * merchandising maturity and this query had no ceiling at all before.
+     * 500 is a safety cap, not real pagination — there's no "next page" UI;
+     * a tenant that ever approaches this needs a proper paginated screen,
+     * which is separate future work.
+     *
+     * Trigger conditions are batch-fetched via getConditionsForRules() (the
+     * same helper NR-172 built for the query-enrichment hot path) instead of
+     * one getConditions() call per rule — this method had the identical N+1
+     * shape NR-172 fixed elsewhere, just on the admin list screen.
+     */
     public List<MerchRule> getAllRules() {
         List<MerchRule> rules = repository.findByTenantIdAndProjectId(
-                TenantContext.getTenantId(), TenantContext.getProjectId());
+                TenantContext.getTenantId(), TenantContext.getProjectId(),
+                PageRequest.of(0, 500, Sort.by(Sort.Direction.DESC, "updatedAt")));
+        Map<String, List<RuleTriggerCondition>> conditionsByRuleId =
+                triggerService.getConditionsForRules(rules.stream().map(MerchRule::getId).toList());
         rules.forEach(r -> {
-            r.setTriggerConditions(triggerService.getConditions(r.getId()));
+            r.setTriggerConditions(conditionsByRuleId.getOrDefault(r.getId(), List.of()));
             deserializeTransientFields(r);
         });
         return rules;
     }
 
+    /**
+     * NR-184: queries PENDING_REVIEW directly instead of filtering
+     * getAllRules()'s output in Java — that used to work because
+     * getAllRules() returned every rule, but now that it's capped to the 500
+     * most recently updated, filtering its output could silently miss an
+     * older pending-review rule that fell outside that window. Pending-review
+     * queues are a working set that gets processed by approvers, not
+     * something that accumulates with tenant maturity the way the full rule
+     * list does, so this one is left unbounded.
+     */
     public List<MerchRule> getPendingRules() {
-        return getAllRules().stream()
-                .filter(r -> r.getStatus() == MerchRule.RuleStatus.PENDING_REVIEW)
-                .toList();
+        List<MerchRule> rules = repository.findByTenantIdAndProjectIdAndStatus(
+                TenantContext.getTenantId(), TenantContext.getProjectId(), MerchRule.RuleStatus.PENDING_REVIEW);
+        Map<String, List<RuleTriggerCondition>> conditionsByRuleId =
+                triggerService.getConditionsForRules(rules.stream().map(MerchRule::getId).toList());
+        rules.forEach(r -> {
+            r.setTriggerConditions(conditionsByRuleId.getOrDefault(r.getId(), List.of()));
+            deserializeTransientFields(r);
+        });
+        return rules;
     }
 
     /**

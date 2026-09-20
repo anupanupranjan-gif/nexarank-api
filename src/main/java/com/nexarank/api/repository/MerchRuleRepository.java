@@ -2,6 +2,7 @@
 package com.nexarank.api.repository;
 
 import com.nexarank.api.model.MerchRule;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -11,6 +12,14 @@ import java.util.List;
 
 public interface MerchRuleRepository extends JpaRepository<MerchRule, String> {
     List<MerchRule> findByTenantIdAndProjectId(String tenantId, String projectId);
+
+    /**
+     * NR-184: bounded sibling of the plain findByTenantIdAndProjectId above —
+     * used by getAllRules() so the "list every rule" admin screen has a
+     * query-level cap instead of returning an unbounded result set as a
+     * tenant's rule count grows with merchandising maturity.
+     */
+    List<MerchRule> findByTenantIdAndProjectId(String tenantId, String projectId, Pageable pageable);
     List<MerchRule> findByTenantIdAndProjectIdAndEnabled(String tenantId, String projectId, boolean enabled);
     List<MerchRule> findByTenantIdAndProjectIdAndStatus(String tenantId, String projectId, MerchRule.RuleStatus status);
     List<MerchRule> findByTenantIdAndProjectIdAndStatusAndEnabled(String tenantId, String projectId, MerchRule.RuleStatus status, boolean enabled);
